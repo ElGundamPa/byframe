@@ -17,6 +17,21 @@
  *    desde el servidor.
  */
 
+/**
+ * Devuelve el valor por defecto también cuando la variable está definida pero
+ * vacía.
+ *
+ * `process.env.X ?? 'defecto'` NO cubre ese caso: `??` solo actúa con null o
+ * undefined, y una cadena vacía pasa de largo. En un panel de despliegue es
+ * facilísimo dejar una variable creada y sin valor, y el resultado era un
+ * `new URL('')` que tumbaba la compilación entera con un críptico
+ * "Invalid URL".
+ */
+function conDefecto(valor: string | undefined, defecto: string): string {
+  const limpio = valor?.trim()
+  return limpio && limpio !== '' ? limpio : defecto
+}
+
 function requerida(valor: string | undefined, nombre: string): string {
   if (!valor || valor.trim() === '') {
     throw new Error(
@@ -40,13 +55,31 @@ export const SUPABASE_ANON_KEY = requerida(
 )
 
 /** Base de los medios, sin barra final. */
-export const MEDIA_BASE_URL = (
-  process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? 'https://media.byframe.co'
+export const MEDIA_BASE_URL = conDefecto(
+  process.env.NEXT_PUBLIC_MEDIA_BASE_URL,
+  'https://media.byframe.co',
 ).replace(/\/+$/, '')
 
-export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+export const SITE_URL = conDefecto(
+  process.env.NEXT_PUBLIC_SITE_URL,
+  'http://localhost:3000',
 ).replace(/\/+$/, '')
+
+/**
+ * SITE_URL como objeto URL, para metadataBase.
+ *
+ * Si alguien escribe algo que no es una URL —un dominio sin protocolo, por
+ * ejemplo— se cae a localhost en vez de romper la compilación. Los metadatos
+ * saldrán mal, que es un problema menor y visible; un despliegue que no
+ * compila es un problema mayor y opaco.
+ */
+export function urlDelSitio(): URL {
+  try {
+    return new URL(SITE_URL)
+  } catch {
+    return new URL('http://localhost:3000')
+  }
+}
 
 /* ── De servidor: nunca deben llegar al navegador ───────────────────────── */
 

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Bodoni_Moda, Inter } from 'next/font/google'
 
+import { urlDelSitio } from '@/lib/env'
 import './globals.css'
 
 /**
@@ -27,9 +28,7 @@ const sans = Inter({
 })
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
-  ),
+  metadataBase: urlDelSitio(),
   title: {
     default: 'ByFrame — Productora audiovisual',
     template: '%s · ByFrame',
