@@ -1,0 +1,33 @@
+@import 'tailwindcss';
+
+/*
+ * Base mínima. La estética del sitio público (negro absoluto, serif de alto
+ * contraste para títulos, sans en mayúsculas con tracking amplio para
+ * navegación) se define en la Fase 2.
+ */
+
+@theme {
+  --color-negro: #000000;
+}
+
+html {
+  /* Inercia nativa. Ninguna librería de smooth-scroll, por decisión de diseño. */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Foco visible en todo elemento interactivo, requisito de accesibilidad. */
+:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

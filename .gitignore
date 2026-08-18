@@ -1,0 +1,42 @@
+# Dependencias
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+next-env.d.ts
+
+# Adaptador de Cloudflare
+.open-next/
+.wrangler/
+
+# Variables de entorno — NUNCA se suben
+.env
+.env.local
+.env*.local
+
+# Material de video: pesa gigabytes y vive en R2, no en git
+*.mov
+*.mxf
+*.prores.mp4
+/media/
+/salida/
+.transcode/
+public/media/
+masters/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Registros
+*.log
+npm-debug.log*
