@@ -1,6 +1,7 @@
 'use client'
 
 import { VideoPlayer } from '@/components/VideoPlayer'
+import { urlDeIncrustacion } from '@/lib/youtube'
 import type { ProjectFormat } from '@/types/database'
 
 /**
@@ -21,6 +22,8 @@ export type ProyectoFicha = {
   description: string | null
   hls_url: string | null
   poster_url: string | null
+  /** Piezas cuya copia vive en el canal del artista. */
+  youtube_id?: string | null
   project_credits: { id: string; role: string; name: string }[]
 }
 
@@ -50,7 +53,28 @@ export function FichaProyecto({
         ruptura; a partir de ahí el reproductor vuelve a la columna.
       */}
       <div className="-mx-5 sm:mx-0">
-        {proyecto.hls_url ? (
+        {/*
+          Orden de preferencia: manifiesto propio primero, incrustación después.
+          Si una pieza tiene las dos cosas, gana la copia propia: mejor calidad,
+          sin marcas ajenas y sin depender de que YouTube siga sirviéndola.
+        */}
+        {!proyecto.hls_url && proyecto.youtube_id ? (
+          <div className="relative w-full overflow-hidden bg-black" style={{ aspectRatio: '16 / 9' }}>
+            <iframe
+              src={urlDeIncrustacion(proyecto.youtube_id)}
+              title={proyecto.title}
+              // Sin allow="fullscreen" el botón de pantalla completa aparece
+              // pero no hace nada, que confunde más que no tenerlo.
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              // Carga diferida: el iframe de YouTube arrastra bastante
+              // JavaScript, y en la ficha suele estar por debajo del pliegue.
+              loading="lazy"
+              referrerPolicy="strict-origin-when-cross-origin"
+              className="absolute inset-0 h-full w-full border-0"
+            />
+          </div>
+        ) : proyecto.hls_url ? (
           <VideoPlayer
             src={proyecto.hls_url}
             poster={proyecto.poster_url}

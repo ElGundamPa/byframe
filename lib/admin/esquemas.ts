@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { extraerIdDeYoutube } from '@/lib/youtube'
+
 /**
  * lib/admin/esquemas.ts
  *
@@ -46,6 +48,20 @@ export const esquemaCredito = z.object({
   name: z.string().trim().min(1, 'El nombre no puede estar vacío.').max(160),
 })
 
+/**
+ * Acepta el id suelto o cualquier forma de enlace de YouTube, y guarda siempre
+ * el id. Nadie copia once caracteres a mano: se copia el enlace.
+ */
+const esquemaYoutube = z
+  .string()
+  .trim()
+  .transform((v) => (v === '' ? null : extraerIdDeYoutube(v)))
+  .nullable()
+  .refine(
+    (v) => v === null || /^[A-Za-z0-9_-]{11}$/.test(v),
+    'No reconozco ese enlace de YouTube. Pega la URL del video o su id de 11 caracteres.',
+  )
+
 export const esquemaProyecto = z.object({
   id: z.string().uuid().optional(),
   slug: esquemaSlug,
@@ -62,6 +78,7 @@ export const esquemaProyecto = z.object({
   hls_url: esquemaRutaMedia,
   poster_url: esquemaRutaMedia,
   loop_url: esquemaRutaMedia,
+  youtube_id: esquemaYoutube,
   duration: z.number().int().min(0).nullable(),
   published: z.boolean(),
   credits: z.array(esquemaCredito).max(60),

@@ -30,6 +30,7 @@ export type ValoresProyecto = {
   hls_url: string
   poster_url: string
   loop_url: string
+  youtube_id: string
   duration: string
   published: boolean
   credits: Credito[]
@@ -45,6 +46,7 @@ export const PROYECTO_VACIO: ValoresProyecto = {
   hls_url: '',
   poster_url: '',
   loop_url: '',
+  youtube_id: '',
   duration: '',
   published: false,
   credits: [],
@@ -145,6 +147,7 @@ export function FormularioProyecto({
       hls_url: valores.hls_url,
       poster_url: valores.poster_url,
       loop_url: valores.loop_url,
+      youtube_id: valores.youtube_id,
       duration: valores.duration === '' ? null : Number(valores.duration),
       published: publicar ?? valores.published,
       credits: valores.credits.map(({ role, name }) => ({ role, name })),
@@ -331,6 +334,21 @@ export function FormularioProyecto({
         </Campo>
 
         <Campo
+          etiqueta="Video de YouTube"
+          id="youtube_id"
+          error={errores.youtube_id}
+          ayuda="Para piezas que viven en el canal del artista. Pega el enlace completo: el panel extrae el id. Si hay manifiesto propio, ese manda."
+        >
+          <input
+            id="youtube_id"
+            value={valores.youtube_id}
+            onChange={(e) => actualizar({ youtube_id: e.target.value })}
+            className={claseEntrada}
+            placeholder="https://youtu.be/…"
+          />
+        </Campo>
+
+        <Campo
           etiqueta="Duración (segundos)"
           id="duration"
           error={errores.duration}
@@ -455,6 +473,7 @@ export function FormularioProyecto({
                 description: valores.description || null,
                 hls_url: valores.hls_url || null,
                 poster_url: valores.poster_url || null,
+                youtube_id: valores.youtube_id || null,
                 project_credits: valores.credits.map((c, i) => ({
                   id: String(i),
                   role: c.role,

@@ -14,7 +14,8 @@ import type { NextConfig } from 'next'
  * daba por supuesto, el sitio devolvía 500 en toda la portada.
  */
 function dominiosDeMedios(): string[] {
-  const dominios = new Set(['media.byframe.co'])
+  // i.ytimg.com: las miniaturas de las piezas alojadas en YouTube.
+  const dominios = new Set(['media.byframe.co', 'i.ytimg.com'])
   const base = process.env.NEXT_PUBLIC_MEDIA_BASE_URL
 
   if (base?.startsWith('http')) {

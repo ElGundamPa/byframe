@@ -1,7 +1,9 @@
 'use client'
 
-import { Imagen } from './Imagen'
 import { useRef } from 'react'
+
+import { miniaturasDeReserva, posterDeYoutube } from '@/lib/youtube'
+import { Imagen } from './Imagen'
 
 import { useLoopEnViewport } from './usar-loop'
 import type { ProyectoPublico } from './tipos'
@@ -26,6 +28,13 @@ export function TarjetaProyecto({
     habilitado: Boolean(proyecto.loop_url),
   })
 
+  // Las piezas alojadas en YouTube no tienen póster propio ni loop: la rejilla
+  // usa la miniatura del video. Un póster pegado a mano en el panel siempre
+  // gana, por si la miniatura automática no es el fotograma que se quiere.
+  const poster =
+    proyecto.poster_url ??
+    (proyecto.youtube_id ? posterDeYoutube(proyecto.youtube_id) : null)
+
   return (
     <button
       type="button"
@@ -34,9 +43,14 @@ export function TarjetaProyecto({
       aria-label={`Ver ${proyecto.title}${proyecto.client ? `, ${proyecto.client}` : ''}`}
     >
       <div className="relative aspect-video w-full">
-        {proyecto.poster_url ? (
+        {poster ? (
           <Imagen
-            src={proyecto.poster_url}
+            src={poster}
+            alternativas={
+              proyecto.youtube_id && !proyecto.poster_url
+                ? miniaturasDeReserva(proyecto.youtube_id)
+                : undefined
+            }
             alt={`Fotograma de ${proyecto.title}`}
             fill
             // Tres columnas en escritorio, dos en tablet, una en móvil: así el

@@ -17,7 +17,7 @@ export default async function PaginaEditarProyecto({
     .select(
       `
         id, slug, title, client, year, format, description,
-        hls_url, poster_url, loop_url, duration, published, deleted_at,
+        hls_url, poster_url, loop_url, youtube_id, duration, published, deleted_at,
         project_credits (id, role, name, sort_order)
       `,
     )
@@ -77,6 +77,7 @@ export default async function PaginaEditarProyecto({
             hls_url: proyecto.hls_url ?? '',
             poster_url: proyecto.poster_url ?? '',
             loop_url: proyecto.loop_url ?? '',
+            youtube_id: proyecto.youtube_id ?? '',
             duration: proyecto.duration !== null ? String(proyecto.duration) : '',
             published: proyecto.published,
             credits: creditos,

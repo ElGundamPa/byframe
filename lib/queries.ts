@@ -32,7 +32,7 @@ export const getProyectosPorFormato = unstable_cache(
       .select(
         `
           id, slug, title, client, year, format, description,
-          hls_url, poster_url, loop_url, duration, sort_order,
+          hls_url, poster_url, loop_url, youtube_id, duration, sort_order,
           project_credits (id, role, name, sort_order)
         `,
       )
@@ -89,7 +89,7 @@ export const getProyectoPorSlug = unstable_cache(
       .select(
         `
           id, slug, title, client, year, format, description,
-          hls_url, poster_url, loop_url, duration,
+          hls_url, poster_url, loop_url, youtube_id, duration,
           project_credits (id, role, name, sort_order)
         `,
       )

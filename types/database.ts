@@ -48,6 +48,7 @@ export type Database = {
           hls_url: string | null
           poster_url: string | null
           loop_url: string | null
+          youtube_id: string | null
           duration: number | null
           sort_order: number
           published: boolean
@@ -66,6 +67,7 @@ export type Database = {
           hls_url?: string | null
           poster_url?: string | null
           loop_url?: string | null
+          youtube_id?: string | null
           duration?: number | null
           sort_order?: number
           published?: boolean
@@ -84,6 +86,7 @@ export type Database = {
           hls_url?: string | null
           poster_url?: string | null
           loop_url?: string | null
+          youtube_id?: string | null
           duration?: number | null
           sort_order?: number
           published?: boolean
