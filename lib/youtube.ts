@@ -93,6 +93,40 @@ export function posterDeYoutube(id: string): string {
 }
 
 /**
+ * URL para la previsualización muda de la rejilla.
+ *
+ * Es el mismo reproductor incrustado, pero configurado para comportarse como
+ * el loop de las piezas propias: arranca solo, sin sonido, sin controles y
+ * repitiéndose.
+ *
+ * `loop=1` no basta por sí solo: YouTube exige que `playlist` repita el mismo
+ * id para que el bucle funcione en un video suelto. Es una rareza de su API, y
+ * sin ella el video se reproduce una vez y se queda congelado en la pantalla
+ * final de sugerencias.
+ *
+ * `start` permite saltarse la cabecera: en un videoclip, los primeros segundos
+ * suelen ser negro o un logo, y como previsualización no dicen nada.
+ */
+export function urlDePrevisualizacion(id: string, desdeSegundo = 0): string {
+  const parametros = new URLSearchParams({
+    autoplay: '1',
+    mute: '1',
+    controls: '0',
+    loop: '1',
+    playlist: id,
+    playsinline: '1',
+    modestbranding: '1',
+    rel: '0',
+    // Sin teclado ni anotaciones: no es un reproductor, es un adorno.
+    disablekb: '1',
+    fs: '0',
+    iv_load_policy: '3',
+    start: String(desdeSegundo),
+  })
+  return `https://www.youtube-nocookie.com/embed/${id}?${parametros}`
+}
+
+/**
  * Miniaturas de reserva, de mejor a peor.
  *
  * maxresdefault no existe para todos los videos —depende de la resolución con

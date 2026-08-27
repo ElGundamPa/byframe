@@ -4,15 +4,23 @@ import { useRef } from 'react'
 
 import { miniaturasDeReserva, posterDeYoutube } from '@/lib/youtube'
 import { Imagen } from './Imagen'
+import { PrevisualizacionYoutube } from './PrevisualizacionYoutube'
 
-import { useLoopEnViewport } from './usar-loop'
+import { useLoopEnViewport, useTurnoDeIncrustacion } from './usar-loop'
 import type { ProyectoPublico } from './tipos'
 
 /**
- * Tarjeta de la rejilla de comerciales: poster + loop mudo.
+ * Tarjeta de la rejilla de comerciales.
  *
- * El loop solo arranca cuando la tarjeta entra en pantalla, y solo si el gestor
- * central le da turno (máximo tres a la vez). Mientras tanto se ve el poster.
+ * Dos formas de moverse, según de dónde salga la pieza:
+ *
+ *   · Con archivo propio → el loop mudo de 6 s, con cupo de tres a la vez.
+ *   · Alojada en YouTube → el reproductor incrustado en silencio y sin
+ *     controles, con cupo de dos, porque cada iframe arrastra su propio
+ *     reproductor entero.
+ *
+ * En los dos casos el movimiento arranca al entrar en pantalla y se detiene al
+ * salir. Mientras tanto se ve la imagen fija.
  */
 export function TarjetaProyecto({
   proyecto,
@@ -24,13 +32,22 @@ export function TarjetaProyecto({
   prioridad?: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const tarjetaRef = useRef<HTMLDivElement>(null)
+
   const activo = useLoopEnViewport(videoRef, {
     habilitado: Boolean(proyecto.loop_url),
   })
 
-  // Las piezas alojadas en YouTube no tienen póster propio ni loop: la rejilla
-  // usa la miniatura del video. Un póster pegado a mano en el panel siempre
-  // gana, por si la miniatura automática no es el fotograma que se quiere.
+  // Solo cuando no hay loop propio: si la pieza tiene archivo, ese siempre gana
+  // —pesa menos, no lleva marcas ajenas y arranca antes—.
+  const usaIncrustacion = Boolean(proyecto.youtube_id) && !proyecto.loop_url
+  const incrustacionActiva = useTurnoDeIncrustacion(tarjetaRef, proyecto.id, {
+    habilitado: usaIncrustacion,
+  })
+
+  // Las piezas alojadas en YouTube no tienen póster propio: la rejilla usa la
+  // miniatura del video. Un póster pegado a mano en el panel siempre gana, por
+  // si la miniatura automática no es el fotograma que se quiere.
   const poster =
     proyecto.poster_url ??
     (proyecto.youtube_id ? posterDeYoutube(proyecto.youtube_id) : null)
@@ -42,7 +59,7 @@ export function TarjetaProyecto({
       className="group relative block w-full overflow-hidden bg-neutral-950 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
       aria-label={`Ver ${proyecto.title}${proyecto.client ? `, ${proyecto.client}` : ''}`}
     >
-      <div className="relative aspect-video w-full">
+      <div ref={tarjetaRef} className="relative aspect-video w-full">
         {poster ? (
           <Imagen
             src={poster}
@@ -82,10 +99,14 @@ export function TarjetaProyecto({
           />
         ) : null}
 
-        {/* Degradado sutil: el título tiene que leerse sobre cualquier plano. */}
-        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+        {usaIncrustacion && incrustacionActiva && proyecto.youtube_id ? (
+          <PrevisualizacionYoutube id={proyecto.youtube_id} />
+        ) : null}
 
-        <div className="absolute bottom-0 left-0 p-4 sm:p-5">
+        {/* Degradado sutil: el título tiene que leerse sobre cualquier plano. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+
+        <div className="pointer-events-none absolute bottom-0 left-0 p-4 sm:p-5">
           <h3 className="font-[family-name:var(--fuente-serif)] text-2xl leading-tight text-white [text-shadow:0_2px_16px_rgba(0,0,0,0.7)] sm:text-3xl">
             {proyecto.title}
           </h3>

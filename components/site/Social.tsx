@@ -1,9 +1,11 @@
 'use client'
 
-import { Imagen } from './Imagen'
 import { useEffect, useRef, useState } from 'react'
 
-import { useLoopEnViewport } from './usar-loop'
+import { miniaturasDeReserva, posterDeYoutube } from '@/lib/youtube'
+import { Imagen } from './Imagen'
+import { PrevisualizacionYoutube } from './PrevisualizacionYoutube'
+import { useLoopEnViewport, useTurnoDeIncrustacion } from './usar-loop'
 import type { ProyectoPublico } from './tipos'
 
 /**
@@ -86,9 +88,20 @@ function TarjetaVertical({
   onAbrir: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const tarjetaRef = useRef<HTMLDivElement>(null)
+
   const activo = useLoopEnViewport(videoRef, {
     habilitado: Boolean(proyecto.loop_url),
   })
+
+  const usaIncrustacion = Boolean(proyecto.youtube_id) && !proyecto.loop_url
+  const incrustacionActiva = useTurnoDeIncrustacion(tarjetaRef, proyecto.id, {
+    habilitado: usaIncrustacion,
+  })
+
+  const poster =
+    proyecto.poster_url ??
+    (proyecto.youtube_id ? posterDeYoutube(proyecto.youtube_id) : null)
 
   return (
     <button
@@ -97,10 +110,15 @@ function TarjetaVertical({
       aria-label={`Ver ${proyecto.title}`}
       className="group relative block w-full overflow-hidden bg-neutral-950 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
     >
-      <div className="relative aspect-[9/16] w-full">
-        {proyecto.poster_url ? (
+      <div ref={tarjetaRef} className="relative aspect-[9/16] w-full">
+        {poster ? (
           <Imagen
-            src={proyecto.poster_url}
+            src={poster}
+            alternativas={
+              proyecto.youtube_id && !proyecto.poster_url
+                ? miniaturasDeReserva(proyecto.youtube_id)
+                : undefined
+            }
             alt={`Fotograma de ${proyecto.title}`}
             fill
             sizes="280px"
@@ -127,7 +145,11 @@ function TarjetaVertical({
           />
         ) : null}
 
-        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+        {usaIncrustacion && incrustacionActiva && proyecto.youtube_id ? (
+          <PrevisualizacionYoutube id={proyecto.youtube_id} />
+        ) : null}
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
 
         <div className="absolute bottom-0 left-0 p-4">
           <h3 className="font-[family-name:var(--fuente-serif)] text-xl leading-tight text-white [text-shadow:0_2px_16px_rgba(0,0,0,0.7)]">

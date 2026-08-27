@@ -124,3 +124,90 @@ export function useLoopEnViewport<T extends HTMLVideoElement>(
 
   return activo
 }
+
+/* ── Turnos para las incrustaciones de YouTube ───────────────────────────── */
+
+/**
+ * Las piezas alojadas en YouTube no tienen loop propio: para que la rejilla se
+ * mueva igual, se incrusta el reproductor en silencio detrás de la miniatura.
+ *
+ * El cupo aquí es más estricto —dos— porque un iframe de YouTube no es un
+ * <video>: arrastra su propio reproductor, con megabytes de JavaScript y su
+ * propia pila de red. Tres o cuatro a la vez hunden el desplazamiento en un
+ * teléfono de gama media.
+ *
+ * A diferencia del gestor de loops, aquí no se pausa nada: el iframe se
+ * desmonta al perder el turno, que es la única forma de que deje de consumir.
+ */
+const CUPO_YOUTUBE = 2
+
+class GestorDeIncrustaciones {
+  private activos: string[] = []
+  private oyentes = new Map<string, (activo: boolean) => void>()
+
+  registrar(clave: string, alCambiar: (activo: boolean) => void) {
+    this.oyentes.set(clave, alCambiar)
+    return () => {
+      this.oyentes.delete(clave)
+      this.soltar(clave)
+    }
+  }
+
+  pedirTurno(clave: string) {
+    if (this.activos.includes(clave)) return
+
+    this.activos.push(clave)
+    while (this.activos.length > CUPO_YOUTUBE) {
+      const masAntiguo = this.activos.shift()
+      if (masAntiguo && masAntiguo !== clave) {
+        this.oyentes.get(masAntiguo)?.(false)
+      }
+    }
+    this.oyentes.get(clave)?.(true)
+  }
+
+  soltar(clave: string) {
+    this.activos = this.activos.filter((c) => c !== clave)
+    this.oyentes.get(clave)?.(false)
+  }
+}
+
+const gestorDeIncrustaciones = new GestorDeIncrustaciones()
+
+/**
+ * Indica si esta tarjeta puede montar su incrustación: está en pantalla y hay
+ * turno libre.
+ */
+export function useTurnoDeIncrustacion(
+  ref: React.RefObject<HTMLElement | null>,
+  clave: string,
+  { habilitado = true }: { habilitado?: boolean } = {},
+) {
+  const [activo, setActivo] = useState(false)
+
+  useEffect(() => {
+    const elemento = ref.current
+    if (!elemento || !habilitado || !loopsPermitidos()) return
+
+    const cancelarRegistro = gestorDeIncrustaciones.registrar(clave, setActivo)
+
+    const observador = new IntersectionObserver(
+      ([entrada]) => {
+        if (entrada.isIntersecting) gestorDeIncrustaciones.pedirTurno(clave)
+        else gestorDeIncrustaciones.soltar(clave)
+      },
+      // Umbral más alto que el de los loops: montar un reproductor entero por
+      // una tarjeta que apenas asoma no compensa.
+      { threshold: 0.6 },
+    )
+
+    observador.observe(elemento)
+
+    return () => {
+      observador.disconnect()
+      cancelarRegistro()
+    }
+  }, [ref, clave, habilitado])
+
+  return activo
+}
