@@ -20,9 +20,16 @@ import { CSS } from '@dnd-kit/utilities'
 import { useState, useTransition } from 'react'
 
 import { guardarOrden } from '@/lib/admin/acciones'
+import { posterDeYoutube } from '@/lib/youtube'
 import { AvisoEstado, type Estado } from './ui'
 
-type Fila = { id: string; title: string; poster_url: string | null; published: boolean }
+type Fila = {
+  id: string
+  title: string
+  poster_url: string | null
+  youtube_id: string | null
+  published: boolean
+}
 
 /**
  * Orden del portafolio con arrastrar y soltar.
@@ -132,10 +139,10 @@ function ElementoOrdenable({ fila, posicion }: { fila: Fila; posicion: number })
       <span className="w-6 text-xs tabular-nums text-neutral-400">{posicion}</span>
 
       <div className="h-10 w-16 shrink-0 overflow-hidden rounded bg-neutral-200">
-        {fila.poster_url ? (
+        {fila.poster_url ?? fila.youtube_id ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={fila.poster_url}
+            src={fila.poster_url ?? posterDeYoutube(fila.youtube_id as string)}
             alt=""
             className="h-full w-full object-cover"
             onError={(e) => {

@@ -1,4 +1,5 @@
 import { OrdenPortafolio } from '@/components/admin/OrdenPortafolio'
+import { resolverMedia } from '@/lib/media'
 import { createClient } from '@/lib/supabase/server'
 
 export default async function PaginaOrden() {
@@ -6,12 +7,15 @@ export default async function PaginaOrden() {
 
   const { data: proyectos, error } = await supabase
     .from('projects')
-    .select('id, title, format, poster_url, published')
+    .select('id, title, format, poster_url, youtube_id, published')
     .is('deleted_at', null)
     .order('sort_order', { ascending: true })
 
-  const horizontales = proyectos?.filter((p) => p.format === 'horizontal') ?? []
-  const verticales = proyectos?.filter((p) => p.format === 'vertical') ?? []
+  const resueltos =
+    proyectos?.map((p) => ({ ...p, poster_url: resolverMedia(p.poster_url) })) ?? []
+
+  const horizontales = resueltos.filter((p) => p.format === 'horizontal')
+  const verticales = resueltos.filter((p) => p.format === 'vertical')
 
   return (
     <div>

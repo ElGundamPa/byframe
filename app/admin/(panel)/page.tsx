@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { ListaProyectos } from '@/components/admin/ListaProyectos'
+import { resolverMedia } from '@/lib/media'
 import { createClient } from '@/lib/supabase/server'
 
 export default async function PaginaResumen({
@@ -15,12 +16,24 @@ export default async function PaginaResumen({
 
   const consulta = supabase
     .from('projects')
-    .select('id, slug, title, client, year, format, poster_url, published, created_at, deleted_at')
+    .select(
+      'id, slug, title, client, year, format, poster_url, youtube_id, published, created_at, deleted_at',
+    )
     .order('sort_order', { ascending: true })
 
-  const { data: proyectos, error } = verPapelera
+  const { data: filas, error } = verPapelera
     ? await consulta.not('deleted_at', 'is', null)
     : await consulta.is('deleted_at', null)
+
+  /*
+   * Las rutas se guardan en su forma canónica (media.byframe.co) y quien las
+   * traduce al origen real es lib/media.ts. El sitio público ya lo hacía; el
+   * panel no, y por eso las miniaturas salían todas en gris.
+   */
+  const proyectos = filas?.map((fila) => ({
+    ...fila,
+    poster_url: resolverMedia(fila.poster_url),
+  }))
 
   const publicados = proyectos?.filter((p) => p.published).length ?? 0
   const borradores = (proyectos?.length ?? 0) - publicados

@@ -9,6 +9,7 @@ import {
   eliminarProyecto,
   restaurarProyecto,
 } from '@/lib/admin/acciones'
+import { posterDeYoutube } from '@/lib/youtube'
 import { AvisoEstado, Boton, ConfirmarBorrado, type Estado } from './ui'
 
 type Fila = {
@@ -19,6 +20,7 @@ type Fila = {
   year: number | null
   format: 'horizontal' | 'vertical'
   poster_url: string | null
+  youtube_id: string | null
   published: boolean
   created_at: string
   deleted_at: string | null
@@ -113,12 +115,16 @@ export function ListaProyectos({
           {visibles.map((proyecto) => (
             <li key={proyecto.id} className="flex items-center gap-4 py-3">
               <div className="h-14 w-24 shrink-0 overflow-hidden rounded bg-neutral-200">
-                {proyecto.poster_url ? (
+                {/* Sin póster propio, la miniatura del video de YouTube. */}
+                {proyecto.poster_url ?? proyecto.youtube_id ? (
                   // <img> y no next/image: son miniaturas de 96 px en una
                   // pantalla interna. Optimizarlas cuesta más de lo que ahorra.
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={proyecto.poster_url}
+                    src={
+                      proyecto.poster_url ??
+                      posterDeYoutube(proyecto.youtube_id as string)
+                    }
                     alt=""
                     className="h-full w-full object-cover"
                     onError={(e) => {

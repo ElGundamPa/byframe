@@ -1,4 +1,5 @@
 import { GestorEquipo } from '@/components/admin/GestorEquipo'
+import { resolverMedia } from '@/lib/media'
 import { createClient } from '@/lib/supabase/server'
 
 export default async function PaginaEquipo() {
@@ -23,7 +24,12 @@ export default async function PaginaEquipo() {
           No se pudo cargar: {error.message}
         </p>
       ) : (
-        <GestorEquipo inicial={equipo ?? []} />
+        <GestorEquipo
+          inicial={(equipo ?? []).map((m) => ({
+            ...m,
+            photo_url: resolverMedia(m.photo_url),
+          }))}
+        />
       )}
     </div>
   )
