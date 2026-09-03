@@ -20,7 +20,23 @@ type Props = {
  *     sobre todo en iOS.
  *   · El poster se pinta siempre debajo. Si el video tarda, falla o el usuario
  *     pidió menos movimiento, lo que se ve es una imagen fija, nunca un rectángulo negro.
+ *   · En pantallas pequeñas se busca una versión ligera del archivo. Un recap
+ *     de 40 s en 1080p pesa 14 MB: en un teléfono con datos móviles eso es un
+ *     abuso, y además nadie distingue 1080 de 720 en seis pulgadas. La versión
+ *     de 720p pesa menos de la mitad.
  */
+
+/**
+ * Convención: junto a `hero.mp4` vive `hero-720.mp4`.
+ *
+ * Se deduce el nombre en vez de guardar dos rutas en la base de datos, para no
+ * complicar el panel con un campo que solo entiende quien lo montó. Si el
+ * archivo ligero no existe, el <video> emite un error y se vuelve al original,
+ * así que la convención puede no cumplirse sin romper nada.
+ */
+function versionLigera(url: string): string | null {
+  return url.endsWith('.mp4') ? url.replace(/\.mp4$/, '-720.mp4') : null
+}
 export function Hero({ videoUrl, posterUrl, texto }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [listo, setListo] = useState(false)
@@ -61,8 +77,24 @@ export function Hero({ videoUrl, posterUrl, texto }: Props) {
       video.canPlayType('application/vnd.apple.mpegurl') !== ''
 
     if (!esManifiesto || soportaHlsNativo) {
-      video.src = videoUrl
+      const ligera = versionLigera(videoUrl)
+      const pantallaPequena = window.matchMedia('(max-width: 767px)').matches
+
+      // Si la versión ligera no existiera, este error devuelve el original.
+      const alFallar = () => {
+        if (video.src !== videoUrl) {
+          video.src = videoUrl
+          void video.play().catch(() => {})
+        }
+      }
+      video.addEventListener('error', alFallar)
+
+      video.src = pantallaPequena && ligera ? ligera : videoUrl
       void video.play().catch(() => {})
+
+      return () => {
+        video.removeEventListener('error', alFallar)
+      }
     } else {
       void import('hls.js').then(({ default: Hls }) => {
         if (cancelado || !Hls.isSupported()) return
