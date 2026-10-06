@@ -1,4 +1,5 @@
 import { AwsClient } from 'aws4fetch'
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 
 import { esquemaSubida, tiposParaSubida } from '@/lib/admin/esquemas'
@@ -70,7 +71,7 @@ export async function POST(peticion: Request) {
     return NextResponse.json(
       {
         error:
-          tipo === 'loop' || tipo === 'portada'
+          tipo === 'loop' || tipo === 'portada' || tipo === 'video'
             ? 'Este campo espera un archivo de video mp4.'
             : 'Este campo espera una imagen, no un video.',
       },
@@ -89,6 +90,10 @@ export async function POST(peticion: Request) {
     equipo: `team/${slug}.${extension}`,
     sitio: `site/${slug}.${extension}`,
     portada: `site/${slug}.${extension}`,
+    // Cada reemplazo usa una ruta nueva: no altera el video publicado antes
+    // de guardar y evita que el navegador conserve la copia anterior en caché.
+    video: `projects/${slug}/video-${randomUUID()}.${extension}`,
+    miniatura: `projects/${slug}/miniatura-${randomUUID()}.${extension}`,
   }
   const clave = rutas[tipo]
 

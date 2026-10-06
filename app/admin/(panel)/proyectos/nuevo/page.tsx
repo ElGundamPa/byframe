@@ -19,8 +19,7 @@ export default function PaginaNuevoProyecto() {
         Nuevo proyecto
       </h1>
       <p className="mt-1 mb-8 text-sm text-neutral-500">
-        El slug se genera del título, y puedes cambiarlo. Tiene que ser el mismo
-        que le pases a <code>--slug</code> en el script de transcodificación.
+        Añade un título, sube tu video o pega su enlace de YouTube y publícalo.
       </p>
 
       <FormularioProyecto inicial={PROYECTO_VACIO} esNuevo />

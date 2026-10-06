@@ -154,6 +154,8 @@ function formHarness(save) {
     '@/components/site/FichaProyecto': { FichaProyecto: 'preview' },
     '@/lib/admin/acciones': { guardarProyecto: save },
     './SubidaArchivo': { SubidaArchivo: 'upload' },
+    './SubidaVideo': { SubidaVideo: 'video-upload' },
+    '@/lib/media': { resolverMedia: (url) => url || null },
     './ui': { Boton: 'button', Campo: 'label', AvisoEstado: 'status', useAvisoDeSalida: () => {} },
   })
   const { FormularioProyecto } = load('components/admin/FormularioProyecto.tsx')
@@ -237,4 +239,108 @@ test('si falla publicar, el formulario conserva su estado de borrador', async ()
   button(env.render(props), 'Guardar y publicar').props.onClick()
   await env.wait()
   button(env.render(props), 'Guardar y publicar')
+})
+
+test('un video MP4 se firma con ruta nueva sin sobrescribir el publicado', async () => {
+  const env = uploadRoute()
+  const first = await (await env.POST(uploadRequest('video', 'video/mp4'))).json()
+  const second = await (await env.POST(uploadRequest('video', 'video/mp4'))).json()
+  assert.match(first.clave, /^projects\/hero\/video-[a-f0-9-]+\.mp4$/)
+  assert.notEqual(first.clave, second.clave)
+  assert.equal((await env.POST(uploadRequest('video', 'image/jpeg'))).status, 400)
+})
+
+test('la miniatura automática admite una imagen y usa una ruta nueva', async () => {
+  const env = uploadRoute()
+  const body = await (await env.POST(uploadRequest('miniatura', 'image/jpeg'))).json()
+  assert.match(body.clave, /^projects\/hero\/miniatura-[a-f0-9-]+\.jpg$/)
+  assert.equal((await env.POST(uploadRequest('miniatura', 'video/mp4'))).status, 400)
+})
+
+test('YouTube válido se normaliza y un enlace inválido no escribe ni borra el video', async () => {
+  const env = actions()
+  const invalid = await env.guardarProyecto({ ...project, youtube_id: 'https://example.com/no-es-youtube' })
+  assert.equal(invalid.ok, false)
+  assert.match(invalid.campos.youtube_id, /enlace válido/)
+  assert.equal(env.rpcCalls.length, 0)
+  const valid = await env.guardarProyecto({ ...project, hls_url: '', youtube_id: 'https://youtu.be/abcdefghijk?t=2', published: true })
+  assert.equal(valid.ok, true)
+  assert.equal(env.rpcCalls[0].args.p_proyecto.youtube_id, 'abcdefghijk')
+  assert.equal(env.rpcCalls[0].args.p_proyecto.hls_url, null)
+  for (const url of ['https://notyoutube.com/watch?v=abcdefghijk', 'https://youtube.com.evil.example/watch?v=abcdefghijk']) {
+    assert.equal((await env.guardarProyecto({ ...project, youtube_id: url })).ok, false)
+  }
+})
+
+test('un borrador sin video es válido y publicar sin video se rechaza antes de escribir', async () => {
+  const env = actions()
+  const input = { ...project, hls_url: '', youtube_id: '' }
+  assert.equal((await env.guardarProyecto(input)).ok, true)
+  assert.equal((await env.guardarProyecto({ ...input, published: true })).ok, false)
+  assert.equal(env.rpcCalls.length, 1)
+})
+
+test('el formulario permite título y YouTube sin rellenar datos opcionales', async () => {
+  const saved = []
+  const env = formHarness(async (input) => { saved.push(input); return { ok: true, datos: { id: PROJECT_ID, published: true } } })
+  const props = { inicial: { ...formValues, id: undefined, hls_url: '', loop_url: '', credits: [], title: '', slug: '', year: '' }, esNuevo: true }
+  let tree = env.render(props)
+  find(tree, (node) => node.type === 'input' && node.props.id === 'title').props.onChange({ target: { value: 'Mi videoclip' } })
+  tree = env.render(props)
+  button(tree, 'Enlace de YouTube').props.onClick()
+  tree = env.render(props)
+  find(tree, (node) => node.type === 'input' && node.props.id === 'youtube_id').props.onChange({ target: { value: 'https://youtu.be/abcdefghijk' } })
+  button(env.render(props), 'Guardar y publicar').props.onClick()
+  await env.wait()
+  assert.equal(saved[0].title, 'Mi videoclip')
+  assert.match(saved[0].slug, /^mi-videoclip-[a-f0-9]{8}$/)
+  assert.equal(saved[0].hls_url, '')
+  assert.equal(saved[0].published, true)
+  assert.equal(saved[0].year, null)
+  assert.deepEqual(saved[0].credits, [])
+})
+
+test('cambiar de HLS a YouTube evita que se siga reproduciendo el video anterior', async () => {
+  const saved = []
+  const env = formHarness(async (input) => { saved.push(input); return { ok: true, datos: { id: PROJECT_ID, published: true } } })
+  const props = { inicial: { ...formValues, loop_url: '/anterior.mp4', poster_url: '/anterior.jpg' }, esNuevo: false }
+  button(env.render(props), 'Enlace de YouTube').props.onClick()
+  const tree = env.render(props)
+  find(tree, (node) => node.type === 'input' && node.props.id === 'youtube_id').props.onChange({ target: { value: 'https://youtu.be/abcdefghijk' } })
+  button(env.render(props), 'Guardar y publicar').props.onClick()
+  await env.wait()
+  assert.equal(saved[0].hls_url, '')
+  assert.equal(saved[0].loop_url, '')
+  assert.equal(saved[0].poster_url, '')
+})
+
+test('no se guarda mientras hay una subida pendiente y se habilita al terminar', async () => {
+  const saved = []
+  const env = formHarness(async (input) => { saved.push(input); return { ok: true, datos: { id: PROJECT_ID, published: true } } })
+  const props = { inicial: formValues, esNuevo: false }
+  find(env.render(props), (node) => node.type === 'video-upload').props.onOcupado(true)
+  let tree = env.render(props)
+  assert.equal(button(tree, 'Guardar y publicar').props.disabled, true)
+  button(tree, 'Guardar y publicar').props.onClick()
+  assert.equal(saved.length, 0)
+  find(tree, (node) => node.type === 'video-upload').props.onOcupado(false)
+  tree = env.render(props)
+  assert.equal(button(tree, 'Guardar y publicar').props.disabled, false)
+})
+
+test('la subida completa rellena título, duración, formato y miniatura antes de publicar', async () => {
+  const saved = []
+  const env = formHarness(async (input) => { saved.push(input); return { ok: true, datos: { id: PROJECT_ID, published: true } } })
+  const props = { inicial: { ...formValues, id: undefined, slug: '', title: '', hls_url: '', credits: [] }, esNuevo: true }
+  find(env.render(props), (node) => node.type === 'video-upload').props.onSubido({
+    url: 'https://media.example/video-unique.mp4', poster: 'https://media.example/miniatura.jpg', format: 'vertical', duration: 12, nombre: 'Mi video',
+  })
+  button(env.render(props), 'Guardar y publicar').props.onClick()
+  await env.wait()
+  assert.equal(saved[0].title, 'Mi video')
+  assert.equal(saved[0].format, 'vertical')
+  assert.equal(saved[0].duration, 12)
+  assert.equal(saved[0].poster_url, 'https://media.example/miniatura.jpg')
+  assert.equal(saved[0].hls_url, 'https://media.example/video-unique.mp4')
+  assert.equal(saved[0].youtube_id, '')
 })

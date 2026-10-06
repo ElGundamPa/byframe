@@ -55,34 +55,39 @@ export const esquemaCredito = z.object({
 const esquemaYoutube = z
   .string()
   .trim()
-  .transform((v) => (v === '' ? null : extraerIdDeYoutube(v)))
   .nullable()
   .refine(
-    (v) => v === null || /^[A-Za-z0-9_-]{11}$/.test(v),
-    'No reconozco ese enlace de YouTube. Pega la URL del video o su id de 11 caracteres.',
+    (v) => !v || extraerIdDeYoutube(v) !== null,
+    'Pega un enlace válido de un video de YouTube.',
   )
+  .transform((v) => (v ? extraerIdDeYoutube(v) : null))
 
-export const esquemaProyecto = z.object({
-  id: z.string().uuid().optional(),
-  slug: esquemaSlug,
-  title: z.string().trim().min(1, 'El título es obligatorio.').max(160),
-  client: textoOpcional,
-  year: z
-    .number()
-    .int()
-    .min(1990, 'Año demasiado antiguo.')
-    .max(2100, 'Año demasiado lejano.')
-    .nullable(),
-  format: z.enum(['horizontal', 'vertical']),
-  description: textoOpcional,
-  hls_url: esquemaRutaMedia,
-  poster_url: esquemaRutaMedia,
-  loop_url: esquemaRutaMedia,
-  youtube_id: esquemaYoutube,
-  duration: z.number().int().min(0).nullable(),
-  published: z.boolean(),
-  credits: z.array(esquemaCredito).max(60),
-})
+export const esquemaProyecto = z
+  .object({
+    id: z.string().uuid().optional(),
+    slug: esquemaSlug,
+    title: z.string().trim().min(1, 'El título es obligatorio.').max(160),
+    client: textoOpcional,
+    year: z
+      .number()
+      .int()
+      .min(1990, 'Año demasiado antiguo.')
+      .max(2100, 'Año demasiado lejano.')
+      .nullable(),
+    format: z.enum(['horizontal', 'vertical']),
+    description: textoOpcional,
+    hls_url: esquemaRutaMedia,
+    poster_url: esquemaRutaMedia,
+    loop_url: esquemaRutaMedia,
+    youtube_id: esquemaYoutube,
+    duration: z.number().int().min(0).nullable(),
+    published: z.boolean(),
+    credits: z.array(esquemaCredito).max(60),
+  })
+  .refine((v) => !v.published || Boolean(v.hls_url || v.youtube_id), {
+    message: 'Sube un video o pega su enlace de YouTube antes de publicar.',
+    path: ['hls_url'],
+  })
 
 export type EntradaProyecto = z.input<typeof esquemaProyecto>
 export type ProyectoValidado = z.output<typeof esquemaProyecto>
@@ -161,13 +166,21 @@ export const TIPOS_PERMITIDOS = [
   'video/mp4',
 ] as const
 
-export const TIPOS_DE_SUBIDA = ['poster', 'loop', 'equipo', 'sitio', 'portada'] as const
+export const TIPOS_DE_SUBIDA = [
+  'poster',
+  'loop',
+  'equipo',
+  'sitio',
+  'portada',
+  'video',
+  'miniatura',
+] as const
 export type TipoDeSubida = (typeof TIPOS_DE_SUBIDA)[number]
 
 /** El selector y el servidor deben aceptar los mismos archivos para cada campo. */
 export function tiposParaSubida(tipo: TipoDeSubida) {
   return TIPOS_PERMITIDOS.filter((mime) =>
-    tipo === 'loop' || tipo === 'portada'
+    tipo === 'loop' || tipo === 'portada' || tipo === 'video'
       ? mime === 'video/mp4'
       : mime.startsWith('image/'),
   )

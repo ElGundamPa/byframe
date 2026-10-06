@@ -18,7 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  */
 
 type Props = {
-  /** Manifiesto .m3u8. */
+  /** Manifiesto HLS o video MP4 directo. */
   src: string
   poster?: string | null
   /** Se muestra en aria-label y en la pantalla de carga. */
@@ -79,11 +79,18 @@ export function VideoPlayer({
     // una cola de peticiones que siguen descargando segmentos en segundo plano.
     let hls: import('hls.js').default | null = null
     let cancelado = false
+    setError(null)
+    setAspecto(null)
+    setProgreso(0)
+    setDuracion(0)
+    setReproduciendo(false)
+    setCargando(true)
 
     const soportaHlsNativo =
       video.canPlayType('application/vnd.apple.mpegurl') !== ''
 
-    if (soportaHlsNativo) {
+    const esMp4 = /\.mp4(?:[?#]|$)/i.test(src)
+    if (esMp4 || soportaHlsNativo) {
       video.src = src
       setCargando(false)
     } else {
@@ -140,6 +147,9 @@ export function VideoPlayer({
       cancelado = true
       hls?.destroy()
       hls = null
+      video.pause()
+      video.removeAttribute('src')
+      video.load()
     }
   }, [src, autoPlay])
 
@@ -181,7 +191,8 @@ export function VideoPlayer({
   /* ── Pantalla completa ────────────────────────────────────────────────── */
 
   useEffect(() => {
-    const alCambiar = () => setPantallaCompleta(Boolean(document.fullscreenElement))
+    const alCambiar = () =>
+      setPantallaCompleta(Boolean(document.fullscreenElement))
     document.addEventListener('fullscreenchange', alCambiar)
     return () => document.removeEventListener('fullscreenchange', alCambiar)
   }, [])
@@ -309,6 +320,16 @@ export function VideoPlayer({
         poster={poster ?? undefined}
         playsInline
         preload="metadata"
+        onLoadedData={() => {
+          setCargando(false)
+          if (autoPlay) void videoRef.current?.play().catch(() => {})
+        }}
+        onError={() => {
+          setError(
+            'No se pudo reproducir el video. Comprueba la conexión o intenta abrirlo en otro navegador.',
+          )
+          setCargando(false)
+        }}
         className="absolute inset-0 h-full w-full object-contain"
         onClick={alternarReproduccion}
         aria-label={titulo}
@@ -425,7 +446,11 @@ export function VideoPlayer({
 
           <BotonControl
             onClick={() => void alternarPantallaCompleta()}
-            etiqueta={pantallaCompleta ? 'Salir de pantalla completa' : 'Pantalla completa'}
+            etiqueta={
+              pantallaCompleta
+                ? 'Salir de pantalla completa'
+                : 'Pantalla completa'
+            }
           >
             <IconoPantallaCompleta className="h-4 w-4" />
           </BotonControl>
@@ -472,7 +497,12 @@ function formatearTiempo(segundos: number): string {
 
 function IconoReproducir({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
       <path d="M8 5v14l11-7z" />
     </svg>
   )
@@ -480,7 +510,12 @@ function IconoReproducir({ className = '' }: { className?: string }) {
 
 function IconoPausa({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
       <path d="M6 4h4v16H6zM14 4h4v16h-4z" />
     </svg>
   )
@@ -488,7 +523,12 @@ function IconoPausa({ className = '' }: { className?: string }) {
 
 function IconoSonido({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
       <path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" />
     </svg>
   )
@@ -496,7 +536,12 @@ function IconoSonido({ className = '' }: { className?: string }) {
 
 function IconoSilencio({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
       <path d="M4 9v6h4l5 4V5L8 9H4zm15.5 3 2.3-2.3-1.2-1.2-2.3 2.3-2.3-2.3-1.2 1.2 2.3 2.3-2.3 2.3 1.2 1.2 2.3-2.3 2.3 2.3 1.2-1.2z" />
     </svg>
   )
@@ -504,7 +549,12 @@ function IconoSilencio({ className = '' }: { className?: string }) {
 
 function IconoPantallaCompleta({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
       <path d="M4 9V4h5v2H6v3H4zm11-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 3v-3h2v5h-5v-2h3z" />
     </svg>
   )

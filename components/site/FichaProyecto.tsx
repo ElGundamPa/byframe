@@ -59,7 +59,14 @@ export function FichaProyecto({
           sin marcas ajenas y sin depender de que YouTube siga sirviéndola.
         */}
         {!proyecto.hls_url && proyecto.youtube_id ? (
-          <div className="relative w-full overflow-hidden bg-black" style={{ aspectRatio: '16 / 9' }}>
+          <div
+            className="relative mx-auto w-full overflow-hidden bg-black"
+            style={
+              proyecto.format === 'vertical'
+                ? { aspectRatio: '9 / 16', maxWidth: '44dvh' }
+                : { aspectRatio: '16 / 9' }
+            }
+          >
             <iframe
               src={urlDeIncrustacion(proyecto.youtube_id)}
               title={proyecto.title}
@@ -83,7 +90,9 @@ export function FichaProyecto({
             // Sin aspect-* en las clases: la caja la fija el propio
             // reproductor con la proporción real del archivo. Aquí solo se
             // limita el tamaño máximo.
-            aspectoPorDefecto={proyecto.format === 'vertical' ? '9 / 16' : '16 / 9'}
+            aspectoPorDefecto={
+              proyecto.format === 'vertical' ? '9 / 16' : '16 / 9'
+            }
             className={
               proyecto.format === 'vertical'
                 ? // Vertical: manda la altura y el ancho se deduce de la

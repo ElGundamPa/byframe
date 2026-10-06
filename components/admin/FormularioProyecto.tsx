@@ -2,11 +2,13 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-
 import { FichaProyecto } from '@/components/site/FichaProyecto'
 import { guardarProyecto } from '@/lib/admin/acciones'
-import { esquemaJsonDelScript } from '@/lib/admin/esquemas'
+import { esquemaProyecto } from '@/lib/admin/esquemas'
+import { resolverMedia } from '@/lib/media'
+import { extraerIdDeYoutube } from '@/lib/youtube'
 import { SubidaArchivo } from './SubidaArchivo'
+import { SubidaVideo } from './SubidaVideo'
 import {
   AvisoEstado,
   Boton,
@@ -18,7 +20,6 @@ import {
 } from './ui'
 
 type Credito = { id?: string; role: string; name: string }
-
 export type ValoresProyecto = {
   id?: string
   slug: string
@@ -35,12 +36,11 @@ export type ValoresProyecto = {
   published: boolean
   credits: Credito[]
 }
-
 export const PROYECTO_VACIO: ValoresProyecto = {
   slug: '',
   title: '',
   client: '',
-  year: String(new Date().getFullYear()),
+  year: '',
   format: 'horizontal',
   description: '',
   hls_url: '',
@@ -51,24 +51,16 @@ export const PROYECTO_VACIO: ValoresProyecto = {
   published: false,
   credits: [],
 }
-
-/**
- * Genera un slug a partir del título.
- *
- * Quita los acentos descomponiendo en Unicode y borrando los diacríticos, para
- * que «Cañón» acabe en «canon» y no en «ca-n-n». El slug es la carpeta del
- * proyecto en el bucket y viaja en la URL: ahí no caben ni tildes ni eñes.
- */
-function slugificar(texto: string): string {
-  return texto
-    .normalize('NFD')
-    // \p{Diacritic} en vez del rango literal de combinantes: son caracteres
-    // invisibles en el código fuente y cualquier editor descuidado los pierde.
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80)
+function slugificar(texto: string) {
+  return (
+    texto
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 65) || 'proyecto'
+  )
 }
 
 export function FormularioProyecto({
@@ -84,106 +76,105 @@ export function FormularioProyecto({
   const [sucio, setSucio] = useState(false)
   const [estado, setEstado] = useState<Estado>({ tipo: 'inactivo' })
   const [errores, setErrores] = useState<Record<string, string>>({})
-  const [slugTocado, setSlugTocado] = useState(!esNuevo)
+  const [slugFijo, setSlugFijo] = useState(!esNuevo)
   const [verPrevia, setVerPrevia] = useState(false)
-
-  useAvisoDeSalida(sucio)
+  const [fuente, setFuente] = useState<'video' | 'youtube'>(
+    inicial.youtube_id && !inicial.hls_url ? 'youtube' : 'video',
+  )
+  const [subiendo, setSubiendo] = useState(false)
+  const [sufijo] = useState(() => crypto.randomUUID().slice(0, 8))
+  const bloqueado = pendiente || subiendo
+  const slug = valores.slug || `proyecto-${sufijo}`
+  const youtubeId = extraerIdDeYoutube(valores.youtube_id)
+  useAvisoDeSalida(sucio || subiendo)
 
   const actualizar = (parcial: Partial<ValoresProyecto>) => {
     setValores((previos) => ({ ...previos, ...parcial }))
     setSucio(true)
+    setEstado({ tipo: 'inactivo' })
+    setErrores((previos) =>
+      Object.fromEntries(
+        Object.entries(previos).filter(
+          ([campo]) =>
+            !(campo in parcial) &&
+            !(campo === 'hls_url' && 'youtube_id' in parcial),
+        ),
+      ),
+    )
   }
-
-  /** El slug sigue al título mientras nadie lo edite a mano. */
-  const alCambiarTitulo = (title: string) => {
-    actualizar(slugTocado ? { title } : { title, slug: slugificar(title) })
-  }
-
-  const pegarJson = async () => {
-    setErrores({})
-    try {
-      const texto = await navigator.clipboard.readText()
-      const analisis = esquemaJsonDelScript.safeParse(JSON.parse(texto))
-      if (!analisis.success) {
-        setEstado({
-          tipo: 'error',
-          mensaje:
-            'El portapapeles no tiene el JSON del script: faltan hls_url, poster_url o loop_url.',
-        })
-        return
-      }
-      actualizar({
-        hls_url: analisis.data.hls_url,
-        poster_url: analisis.data.poster_url,
-        loop_url: analisis.data.loop_url,
-        duration:
-          analisis.data.duration !== undefined
-            ? String(analisis.data.duration)
-            : valores.duration,
-      })
-      setEstado({ tipo: 'exito', mensaje: 'Rutas pegadas desde el script.' })
-    } catch {
-      // Safari y Firefox pueden negar el acceso al portapapeles sin gesto
-      // explícito; en ese caso, pegar a mano en los campos sigue funcionando.
-      setEstado({
-        tipo: 'error',
-        mensaje: 'No se pudo leer el portapapeles. Pega las rutas a mano en los tres campos.',
-      })
-    }
-  }
-
+  const alCambiarTitulo = (title: string) =>
+    actualizar(
+      slugFijo ? { title } : { title, slug: `${slugificar(title)}-${sufijo}` },
+    )
   const enviar = (publicar?: boolean) => {
-    if (pendiente) return
-    setEstado({ tipo: 'guardando' })
-    setErrores({})
-
+    if (bloqueado) return
     const entrada = {
-      id: valores.id,
-      slug: valores.slug,
-      title: valores.title,
-      client: valores.client,
+      ...valores,
+      slug,
       year: valores.year === '' ? null : Number(valores.year),
-      format: valores.format,
-      description: valores.description,
-      hls_url: valores.hls_url,
-      poster_url: valores.poster_url,
-      loop_url: valores.loop_url,
-      youtube_id: valores.youtube_id,
-      duration: valores.duration === '' ? null : Number(valores.duration),
+      duration:
+        fuente === 'youtube' || valores.duration === ''
+          ? null
+          : Number(valores.duration),
+      hls_url: fuente === 'video' ? valores.hls_url : '',
+      // Mantiene el respaldo de YouTube de los proyectos HLS existentes.
+      youtube_id:
+        fuente === 'youtube'
+          ? valores.youtube_id
+          : inicial.hls_url
+            ? inicial.youtube_id
+            : '',
+      loop_url: fuente === 'video' ? valores.loop_url : '',
       published: publicar ?? valores.published,
       credits: valores.credits.map(({ role, name }) => ({ role, name })),
     }
-
+    const analisis = esquemaProyecto.safeParse(entrada)
+    if (!analisis.success) {
+      const campos: Record<string, string> = {}
+      for (const problema of analisis.error.issues) {
+        const campo = String(problema.path[0])
+        campos[campo] ??= problema.message
+      }
+      setErrores(campos)
+      setEstado({
+        tipo: 'error',
+        mensaje: 'Revisa los campos indicados antes de guardar.',
+      })
+      return
+    }
+    setEstado({ tipo: 'guardando' })
+    setErrores({})
     iniciarTransicion(async () => {
-      const resultado = await guardarProyecto(entrada)
-
-      if (resultado.ok) {
+      try {
+        const resultado = await guardarProyecto(entrada)
+        if (!resultado.ok) {
+          setErrores(resultado.campos ?? {})
+          setEstado({ tipo: 'error', mensaje: resultado.error })
+          return
+        }
         if (resultado.datos) {
           const { id, published } = resultado.datos
-          setValores((previos) => ({ ...previos, id, published }))
+          setValores((previos) => ({ ...previos, id, slug, published }))
+          setSlugFijo(true)
         }
         setSucio(false)
         setEstado({
           tipo: 'exito',
-          mensaje: entrada.published ? 'Guardado y publicado.' : 'Guardado como borrador.',
+          mensaje: entrada.published
+            ? 'Guardado y publicado.'
+            : 'Guardado como borrador.',
         })
-        if (esNuevo && !valores.id && resultado.datos) {
+        if (esNuevo && !valores.id && resultado.datos)
           router.replace(`/admin/proyectos/${resultado.datos.id}`)
-        }
         router.refresh()
-      } else {
-        setErrores(resultado.campos ?? {})
-        setEstado({ tipo: 'error', mensaje: resultado.error })
+      } catch {
+        setEstado({
+          tipo: 'error',
+          mensaje:
+            'No se pudo guardar. Tus cambios siguen aquí; vuelve a intentarlo.',
+        })
       }
     })
-  }
-
-  const moverCredito = (indice: number, direccion: -1 | 1) => {
-    const destino = indice + direccion
-    if (destino < 0 || destino >= valores.credits.length) return
-    const creditos = [...valores.credits]
-    ;[creditos[indice], creditos[destino]] = [creditos[destino], creditos[indice]]
-    actualizar({ credits: creditos })
   }
 
   return (
@@ -192,330 +183,368 @@ export function FormularioProyecto({
         e.preventDefault()
         enviar()
       }}
-      className="space-y-10"
+      className="space-y-6"
     >
-      <fieldset disabled={pendiente} className="contents">
-      {/* ── Datos ─────────────────────────────────────────────────────── */}
-      <section className="space-y-5">
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Campo etiqueta="Título" id="title" error={errores.title}>
-            <input
-              id="title"
-              value={valores.title}
-              onChange={(e) => alCambiarTitulo(e.target.value)}
-              className={claseEntrada}
-              required
-            />
-          </Campo>
-
-          <Campo
-            etiqueta="Slug"
-            id="slug"
-            error={errores.slug}
-            ayuda="Carpeta del proyecto en el bucket. Debe coincidir con el --slug del script."
+      <fieldset disabled={pendiente} className="min-w-0 space-y-6">
+        <Campo
+          etiqueta="Título del proyecto"
+          id="title"
+          error={errores.title || errores.slug}
+        >
+          <input
+            id="title"
+            value={valores.title}
+            disabled={subiendo}
+            required
+            maxLength={160}
+            placeholder="Por ejemplo: Videoclip de la banda"
+            className={claseEntrada}
+            onChange={(e) => alCambiarTitulo(e.target.value)}
+          />
+        </Campo>
+        <section aria-labelledby="video-label" className="space-y-4">
+          <h2 id="video-label" className="text-sm font-medium text-neutral-700">
+            Video
+          </h2>
+          <div
+            className="flex flex-wrap gap-2"
+            role="group"
+            aria-label="Cómo añadir el video"
           >
-            <input
-              id="slug"
-              value={valores.slug}
-              onChange={(e) => {
-                setSlugTocado(true)
-                actualizar({ slug: e.target.value })
-              }}
-              className={claseEntrada}
-              required
-            />
-          </Campo>
-
-          <Campo etiqueta="Cliente" id="client" error={errores.client}>
-            <input
-              id="client"
-              value={valores.client}
-              onChange={(e) => actualizar({ client: e.target.value })}
-              className={claseEntrada}
-            />
-          </Campo>
-
-          <div className="grid grid-cols-2 gap-5">
-            <Campo etiqueta="Año" id="year" error={errores.year}>
+            {(['video', 'youtube'] as const).map((opcion) => (
+              <Boton
+                key={opcion}
+                type="button"
+                disabled={subiendo}
+                aria-pressed={fuente === opcion}
+                variante={fuente === opcion ? 'primario' : 'secundario'}
+                onClick={() => {
+                  if (opcion !== fuente)
+                    actualizar({ poster_url: '', loop_url: '' })
+                  setFuente(opcion)
+                  setSucio(true)
+                  setErrores({})
+                  setEstado({ tipo: 'inactivo' })
+                }}
+              >
+                {opcion === 'video' ? 'Subir video' : 'Enlace de YouTube'}
+              </Boton>
+            ))}
+          </div>
+          {fuente === 'video' ? (
+            <>
+              <SubidaVideo
+                slug={slug}
+                disabled={bloqueado}
+                onOcupado={setSubiendo}
+                onSubido={(datos) => {
+                  actualizar({
+                    hls_url: datos.url,
+                    poster_url: datos.poster || valores.poster_url,
+                    format: datos.format,
+                    duration: String(datos.duration),
+                    title: valores.title || datos.nombre,
+                    slug,
+                    loop_url: '',
+                  })
+                  setSlugFijo(true)
+                }}
+              />
+              {valores.hls_url ? (
+                <p className="text-sm text-green-700">
+                  Video añadido. Puedes verlo antes de publicar o seleccionar
+                  otro para reemplazarlo.
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <Campo
+              etiqueta="Enlace de YouTube"
+              id="youtube_id"
+              error={errores.youtube_id}
+            ayuda="Usa un video público o no listado. Su imagen de portada se añade automáticamente."
+            >
               <input
-                id="year"
-                type="number"
-                inputMode="numeric"
-                value={valores.year}
-                onChange={(e) => actualizar({ year: e.target.value })}
+                id="youtube_id"
+                type="text"
+                inputMode="url"
+                disabled={subiendo}
+                value={valores.youtube_id}
+                placeholder="https://www.youtube.com/watch?v=…"
                 className={claseEntrada}
+                onChange={(e) =>
+                  actualizar({
+                    youtube_id: e.target.value,
+                    ...(/\/shorts\//.test(e.target.value)
+                      ? { format: 'vertical' as const }
+                      : {}),
+                  })
+                }
               />
             </Campo>
-
-            <Campo etiqueta="Formato" id="format" error={errores.format}>
-              <select
-                id="format"
-                value={valores.format}
-                onChange={(e) =>
-                  actualizar({ format: e.target.value as 'horizontal' | 'vertical' })
-                }
-                className={claseEntrada}
-              >
-                <option value="horizontal">Horizontal (16:9)</option>
-                <option value="vertical">Vertical (9:16)</option>
-              </select>
-            </Campo>
-          </div>
-        </div>
-
-        <Campo etiqueta="Descripción" id="description" error={errores.description}>
-          <textarea
-            id="description"
-            rows={4}
-            value={valores.description}
-            onChange={(e) => actualizar({ description: e.target.value })}
-            className={claseArea}
-          />
-        </Campo>
-      </section>
-
-      {/* ── Archivos ──────────────────────────────────────────────────── */}
-      <section className="space-y-5 border-t border-neutral-200 pt-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-neutral-900">Archivos</h2>
-            <p className="mt-1 text-sm text-neutral-500">
-              Pega aquí lo que imprime <code>npm run transcode</code>.
+          )}
+          {errores.hls_url ? (
+            <p role="alert" className="text-sm text-red-600">
+              {errores.hls_url}
             </p>
-          </div>
-          <Boton type="button" onClick={pegarJson}>
-            Pegar JSON del script
-          </Boton>
-        </div>
-
-        <Campo
-          etiqueta="Manifiesto HLS"
-          id="hls_url"
-          error={errores.hls_url}
-          ayuda="La carpeta HLS siempre se sube con el script: no se puede subir desde aquí."
-        >
-          <input
-            id="hls_url"
-            value={valores.hls_url}
-            onChange={(e) => actualizar({ hls_url: e.target.value })}
-            className={claseEntrada}
-            placeholder="https://media.byframe.co/projects/slug/hls/master.m3u8"
-          />
-        </Campo>
-
-        <Campo etiqueta="Póster" id="poster_url" error={errores.poster_url}>
-          <input
-            id="poster_url"
-            value={valores.poster_url}
-            onChange={(e) => actualizar({ poster_url: e.target.value })}
-            className={claseEntrada}
-          />
-          <div className="mt-2">
-            <SubidaArchivo
-              slug={valores.slug}
-              tipo="poster"
-              etiqueta="Subir póster"
-              ayuda="Alternativa manual: WebP, AVIF, JPG o PNG."
-              onSubido={(ruta) => actualizar({ poster_url: ruta })}
-            />
-          </div>
-        </Campo>
-
-        <Campo etiqueta="Loop" id="loop_url" error={errores.loop_url}>
-          <input
-            id="loop_url"
-            value={valores.loop_url}
-            onChange={(e) => actualizar({ loop_url: e.target.value })}
-            className={claseEntrada}
-          />
-          <div className="mt-2">
-            <SubidaArchivo
-              slug={valores.slug}
-              tipo="loop"
-              etiqueta="Subir loop"
-              ayuda="mp4 mudo y corto. Es lo que se reproduce en la rejilla."
-              onSubido={(ruta) => actualizar({ loop_url: ruta })}
-            />
-          </div>
-        </Campo>
-
-        <Campo
-          etiqueta="Video de YouTube"
-          id="youtube_id"
-          error={errores.youtube_id}
-          ayuda="Para piezas que viven en el canal del artista. Pega el enlace completo: el panel extrae el id. Si hay manifiesto propio, ese manda."
-        >
-          <input
-            id="youtube_id"
-            value={valores.youtube_id}
-            onChange={(e) => actualizar({ youtube_id: e.target.value })}
-            className={claseEntrada}
-            placeholder="https://youtu.be/…"
-          />
-        </Campo>
-
-        <Campo
-          etiqueta="Duración (segundos)"
-          id="duration"
-          error={errores.duration}
-        >
-          <input
-            id="duration"
-            type="number"
-            inputMode="numeric"
-            value={valores.duration}
-            onChange={(e) => actualizar({ duration: e.target.value })}
-            className={`${claseEntrada} max-w-[12rem]`}
-          />
-        </Campo>
-      </section>
-
-      {/* ── Créditos ──────────────────────────────────────────────────── */}
-      <section className="space-y-4 border-t border-neutral-200 pt-8">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-neutral-900">Créditos</h2>
-          <Boton
-            type="button"
-            onClick={() =>
-              actualizar({ credits: [...valores.credits, { role: '', name: '' }] })
+          ) : null}
+          <Campo
+            etiqueta="Formato"
+            id="format"
+            error={errores.format}
+            ayuda={
+              fuente === 'video'
+                ? 'Se detecta al subir el video. Puedes ajustarlo si lo necesitas.'
+                : undefined
             }
           >
-            Añadir línea
-          </Boton>
-        </div>
+            <select
+              id="format"
+              value={valores.format}
+              disabled={subiendo}
+              className={`${claseEntrada} sm:max-w-xs`}
+              onChange={(e) =>
+                actualizar({
+                  format: e.target.value as 'horizontal' | 'vertical',
+                })
+              }
+            >
+              <option value="horizontal">Horizontal</option>
+              <option value="vertical">Vertical</option>
+            </select>
+          </Campo>
+        </section>
 
-        {valores.credits.length === 0 ? (
-          <p className="rounded-md border border-dashed border-neutral-300 py-8 text-center text-sm text-neutral-500">
-            Sin créditos todavía.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {valores.credits.map((credito, indice) => (
-              <li key={indice} className="flex flex-wrap items-center gap-2">
+        <details
+          className="rounded-lg border border-neutral-200 bg-white p-5"
+          open={
+            Boolean(
+              errores.client ||
+                errores.year ||
+                errores.description ||
+                errores.poster_url ||
+                errores.credits,
+            ) || undefined
+          }
+        >
+          <summary className="cursor-pointer text-sm font-medium text-neutral-700">
+            Más detalles{' '}
+            <span className="font-normal text-neutral-500">(opcional)</span>
+          </summary>
+          <div className="mt-5 space-y-5">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Campo etiqueta="Cliente" id="client" error={errores.client}>
                 <input
-                  value={credito.role}
-                  onChange={(e) => {
-                    const creditos = [...valores.credits]
-                    creditos[indice] = { ...credito, role: e.target.value }
-                    actualizar({ credits: creditos })
-                  }}
-                  placeholder="Rol"
-                  aria-label={`Rol del crédito ${indice + 1}`}
-                  className={`${claseEntrada} mt-0 w-full sm:w-56`}
+                  id="client"
+                  value={valores.client}
+                  disabled={subiendo}
+                  className={claseEntrada}
+                  onChange={(e) => actualizar({ client: e.target.value })}
                 />
+              </Campo>
+              <Campo etiqueta="Año" id="year" error={errores.year}>
                 <input
-                  value={credito.name}
-                  onChange={(e) => {
-                    const creditos = [...valores.credits]
-                    creditos[indice] = { ...credito, name: e.target.value }
-                    actualizar({ credits: creditos })
-                  }}
-                  placeholder="Nombre"
-                  aria-label={`Nombre del crédito ${indice + 1}`}
-                  className={`${claseEntrada} mt-0 w-full flex-1 sm:w-auto`}
+                  id="year"
+                  type="number"
+                  min={1990}
+                  max={2100}
+                  value={valores.year}
+                  disabled={subiendo}
+                  className={claseEntrada}
+                  onChange={(e) => actualizar({ year: e.target.value })}
                 />
-                <div className="flex gap-1">
-                  {/* Botones y no arrastrar: son cinco líneas y, con teclado o
-                      lector de pantalla, subir y bajar es accesible sin más. */}
+              </Campo>
+            </div>
+            <Campo
+              etiqueta="Descripción"
+              id="description"
+              error={errores.description}
+            >
+              <textarea
+                id="description"
+                rows={3}
+                value={valores.description}
+                disabled={subiendo}
+                className={claseArea}
+                onChange={(e) => actualizar({ description: e.target.value })}
+              />
+            </Campo>
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-neutral-700">
+                Imagen de portada personalizada
+              </h3>
+              <p className="text-xs text-neutral-500">
+                Solo si quieres usar una imagen diferente a la automática.
+              </p>
+              <SubidaArchivo
+                slug={slug}
+                tipo="miniatura"
+                etiqueta="Elegir imagen"
+                disabled={bloqueado}
+                onOcupado={setSubiendo}
+                onSubido={(ruta) => actualizar({ poster_url: ruta })}
+              />
+              {fuente === 'youtube' && valores.poster_url ? (
+                <Boton
+                  type="button"
+                  disabled={subiendo}
+                  onClick={() => actualizar({ poster_url: '' })}
+                >
+                  Usar imagen de YouTube
+                </Boton>
+              ) : null}
+              {errores.poster_url ? (
+                <p role="alert" className="text-sm text-red-600">
+                  {errores.poster_url}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-neutral-700">Créditos</h3>
+              <p className="text-xs text-neutral-500">
+                Personas que participaron, por ejemplo: Dirección — Ana.
+              </p>
+              {valores.credits.map((credito, indice) => (
+                <div
+                  key={credito.id || indice}
+                  className="flex flex-wrap gap-2"
+                >
+                  <input
+                    aria-label={`Rol del crédito ${indice + 1}`}
+                    placeholder="Función"
+                    value={credito.role}
+                    disabled={subiendo}
+                    className={`${claseEntrada} sm:flex-1 sm:w-auto`}
+                    onChange={(e) =>
+                      actualizar({
+                        credits: valores.credits.map((c, i) =>
+                          i === indice ? { ...c, role: e.target.value } : c,
+                        ),
+                      })
+                    }
+                  />
+                  <input
+                    aria-label={`Nombre del crédito ${indice + 1}`}
+                    placeholder="Nombre"
+                    value={credito.name}
+                    disabled={subiendo}
+                    className={`${claseEntrada} sm:flex-1 sm:w-auto`}
+                    onChange={(e) =>
+                      actualizar({
+                        credits: valores.credits.map((c, i) =>
+                          i === indice ? { ...c, name: e.target.value } : c,
+                        ),
+                      })
+                    }
+                  />
                   <Boton
                     type="button"
-                    onClick={() => moverCredito(indice, -1)}
-                    aria-label={`Subir crédito ${indice + 1}`}
-                    className="w-11 px-0"
-                  >
-                    ↑
-                  </Boton>
-                  <Boton
-                    type="button"
-                    onClick={() => moverCredito(indice, 1)}
-                    aria-label={`Bajar crédito ${indice + 1}`}
-                    className="w-11 px-0"
-                  >
-                    ↓
-                  </Boton>
-                  <Boton
-                    type="button"
-                    variante="peligro"
+                    disabled={subiendo}
                     aria-label={`Quitar crédito ${indice + 1}`}
-                    className="w-11 px-0"
                     onClick={() =>
                       actualizar({
                         credits: valores.credits.filter((_, i) => i !== indice),
                       })
                     }
                   >
-                    ×
+                    Quitar
                   </Boton>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* ── Vista previa ──────────────────────────────────────────────── */}
-      <section className="border-t border-neutral-200 pt-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-neutral-900">Vista previa</h2>
-            <p className="mt-1 text-sm text-neutral-500">
-              El mismo reproductor del sitio, antes de publicar.
-            </p>
+              ))}
+              <Boton
+                type="button"
+                disabled={subiendo || valores.credits.length >= 60}
+                onClick={() =>
+                  actualizar({
+                    credits: [...valores.credits, { role: '', name: '' }],
+                  })
+                }
+              >
+                Añadir persona
+              </Boton>
+              {errores.credits ? (
+                <p role="alert" className="text-sm text-red-600">
+                  {errores.credits}
+                </p>
+              ) : null}
+            </div>
           </div>
-          <Boton type="button" onClick={() => setVerPrevia((v) => !v)}>
-            {verPrevia ? 'Ocultar' : 'Ver'}
-          </Boton>
-        </div>
+        </details>
 
-        {verPrevia ? (
-          <div className="mt-5 rounded-lg bg-black p-5">
-            <FichaProyecto
-              tituloComo="h2"
-              proyecto={{
-                title: valores.title || 'Sin título',
-                client: valores.client || null,
-                year: valores.year ? Number(valores.year) : null,
-                format: valores.format,
-                description: valores.description || null,
-                hls_url: valores.hls_url || null,
-                poster_url: valores.poster_url || null,
-                youtube_id: valores.youtube_id || null,
-                project_credits: valores.credits.map((c, i) => ({
-                  id: String(i),
-                  role: c.role,
-                  name: c.name,
-                })),
-              }}
-            />
-          </div>
+        {(
+          fuente === 'video' ? Boolean(valores.hls_url) : Boolean(youtubeId)
+        ) ? (
+          <section className="space-y-4">
+            <Boton
+              type="button"
+              disabled={subiendo}
+              onClick={() => setVerPrevia((v) => !v)}
+            >
+              {verPrevia ? 'Ocultar vista previa' : 'Ver antes de publicar'}
+            </Boton>
+            {verPrevia ? (
+              <div className="rounded-lg bg-black p-5">
+                <FichaProyecto
+                  tituloComo="h2"
+                  proyecto={{
+                    title: valores.title || 'Sin título',
+                    client: valores.client || null,
+                    year: valores.year ? Number(valores.year) : null,
+                    format: valores.format,
+                    description: valores.description || null,
+                    hls_url:
+                      fuente === 'video'
+                        ? resolverMedia(valores.hls_url)
+                        : null,
+                    poster_url: resolverMedia(valores.poster_url),
+                    youtube_id: fuente === 'youtube' ? youtubeId : null,
+                    project_credits: valores.credits.map((c, i) => ({
+                      id: String(i),
+                      role: c.role,
+                      name: c.name,
+                    })),
+                  }}
+                />
+              </div>
+            ) : null}
+          </section>
         ) : null}
-      </section>
 
-      {/* ── Guardar ───────────────────────────────────────────────────── */}
-      <div className="sticky bottom-0 -mx-6 flex flex-wrap items-center gap-3 border-t border-neutral-200 bg-white/95 px-6 py-4 backdrop-blur">
-        <Boton type="submit" variante="primario" disabled={pendiente}>
-          {valores.published ? 'Guardar' : 'Guardar borrador'}
-        </Boton>
-
-        {!valores.published ? (
-          <Boton type="button" disabled={pendiente} onClick={() => enviar(true)}>
-            Guardar y publicar
+        <AvisoEstado estado={estado} />
+        <div className="sticky bottom-0 -mx-6 flex flex-wrap items-center gap-3 border-t border-neutral-200 bg-white/95 px-6 py-4 backdrop-blur">
+          <Boton
+            type="submit"
+            variante={valores.published ? 'primario' : 'secundario'}
+            disabled={bloqueado}
+          >
+            {valores.published ? 'Guardar' : 'Guardar borrador'}
           </Boton>
-        ) : (
-          <Boton type="button" disabled={pendiente} onClick={() => enviar(false)}>
-            Pasar a borrador
-          </Boton>
-        )}
-
-        <span className="text-xs text-neutral-500">
-          {valores.published ? 'Publicado' : 'Borrador'}
-          {sucio ? ' · cambios sin guardar' : ''}
-        </span>
-
-        <div className="ml-auto">
-          <AvisoEstado estado={estado} />
+          {!valores.published ? (
+            <Boton
+              type="button"
+              variante="primario"
+              disabled={bloqueado}
+              onClick={() => enviar(true)}
+            >
+              Guardar y publicar
+            </Boton>
+          ) : (
+            <Boton
+              type="button"
+              disabled={bloqueado}
+              onClick={() => enviar(false)}
+            >
+              Pasar a borrador
+            </Boton>
+          )}
+          <span className="text-xs text-neutral-500">
+            {subiendo
+              ? 'Espera a que termine la subida'
+              : valores.published
+                ? 'Publicado'
+                : 'Todavía no visible en el sitio'}
+          </span>
         </div>
-      </div>
       </fieldset>
     </form>
   )

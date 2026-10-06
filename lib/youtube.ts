@@ -20,7 +20,9 @@ const ID_VALIDO = /^[A-Za-z0-9_-]{11}$/
  * o el de «Compartir», y cada uno tiene una forma distinta. Pedirle al usuario
  * que recorte a mano once caracteres es pedirle que se equivoque.
  */
-export function extraerIdDeYoutube(entrada: string | null | undefined): string | null {
+export function extraerIdDeYoutube(
+  entrada: string | null | undefined,
+): string | null {
   if (!entrada) return null
 
   const texto = entrada.trim()
@@ -36,7 +38,11 @@ export function extraerIdDeYoutube(entrada: string | null | undefined): string |
       return ID_VALIDO.test(id) ? id : null
     }
 
-    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+    if (
+      ['youtube.com', 'youtube-nocookie.com'].some(
+        (dominio) => host === dominio || host.endsWith(`.${dominio}`),
+      )
+    ) {
       // youtube.com/watch?v=<id>
       const v = url.searchParams.get('v')
       if (v && ID_VALIDO.test(v)) return v

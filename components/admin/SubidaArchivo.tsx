@@ -1,205 +1,99 @@
 'use client'
 
-import { useRef, useState } from 'react'
-
-import { TAMANO_MAXIMO, tiposParaSubida, type TipoDeSubida } from '@/lib/admin/esquemas'
+import { useEffect, useRef, useState } from 'react'
+import { tiposParaSubida, type TipoDeSubida } from '@/lib/admin/esquemas'
+import { subirArchivo } from '@/lib/admin/subir-archivo'
 import { Boton } from './ui'
 
-/**
- * Subida directa a R2 con URL prefirmada.
- *
- * El archivo va del navegador a R2 sin pasar por el servidor: este solo firma.
- *
- * Detalle que evita el fallo más común (F5 de SETUP.md): la URL se pide **en el
- * momento del envío**, no al montar el componente. Las firmas caducan en diez
- * minutos, y entre abrir el formulario y soltar el archivo puede pasar media
- * hora.
- *
- * Se usa XMLHttpRequest y no fetch porque fetch todavía no informa del progreso
- * de subida en ningún navegador. Sin progreso real, un loop de 20 MB parece
- * colgado.
- */
 export function SubidaArchivo({
   slug,
   tipo,
   etiqueta,
   ayuda,
   onSubido,
+  onOcupado,
+  disabled = false,
 }: {
   slug: string
   tipo: TipoDeSubida
   etiqueta: string
   ayuda?: string
-  onSubido: (rutaPublica: string) => void
+  onSubido: (ruta: string) => void
+  onOcupado?: (ocupado: boolean) => void
+  disabled?: boolean
 }) {
-  const entradaRef = useRef<HTMLInputElement>(null)
-  const peticionRef = useRef<XMLHttpRequest | null>(null)
+  const entrada = useRef<HTMLInputElement>(null)
+  const controlador = useRef<AbortController | null>(null)
   const [progreso, setProgreso] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const tiposPermitidos = tiposParaSubida(tipo)
-
-  const cancelar = () => {
-    peticionRef.current?.abort()
-    peticionRef.current = null
-    setProgreso(null)
-  }
-
+  useEffect(() => () => controlador.current?.abort(), [])
   const subir = async (archivo: File) => {
+    const abort = new AbortController()
+    controlador.current = abort
     setError(null)
-
-    if (archivo.size > TAMANO_MAXIMO) {
-      setError(
-        `El archivo pesa ${(archivo.size / 1024 / 1024).toFixed(0)} MB y el máximo son ${TAMANO_MAXIMO / 1024 / 1024} MB. Los masters van por el script, no por aquí.`,
-      )
-      return
-    }
-
-    if (!tiposPermitidos.includes(archivo.type as (typeof tiposPermitidos)[number])) {
-      setError(
-        tipo === 'loop' || tipo === 'portada'
-          ? 'Selecciona un video MP4.'
-          : 'Selecciona una imagen JPG, PNG, WebP o AVIF.',
-      )
-      return
-    }
-
-    if (!slug) {
-      setError('Escribe primero el slug del proyecto: define la carpeta de destino.')
-      return
-    }
-
     setProgreso(0)
-
-    let firma: { url: string; rutaPublica: string; contentType: string }
+    onOcupado?.(true)
     try {
-      const respuesta = await fetch('/api/admin/upload-url', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          slug,
-          tipo,
-          nombreArchivo: archivo.name,
-          contentType: archivo.type,
-          tamano: archivo.size,
-        }),
-      })
-
-      const cuerpo = await respuesta.json()
-      if (!respuesta.ok) throw new Error(cuerpo.error ?? 'No se pudo firmar la subida.')
-      firma = cuerpo
+      onSubido(
+        await subirArchivo(archivo, slug, tipo, abort.signal, setProgreso),
+      )
     } catch (e) {
-      setProgreso(null)
-      setError(e instanceof Error ? e.message : 'No se pudo firmar la subida.')
-      return
-    }
-
-    await new Promise<void>((resolver) => {
-      const peticion = new XMLHttpRequest()
-      peticionRef.current = peticion
-
-      peticion.open('PUT', firma.url, true)
-      // Debe coincidir EXACTAMENTE con el Content-Type que se firmó, o R2
-      // devuelve SignatureDoesNotMatch.
-      peticion.setRequestHeader('Content-Type', firma.contentType)
-
-      peticion.upload.onprogress = (evento) => {
-        if (evento.lengthComputable) {
-          setProgreso(Math.round((evento.loaded / evento.total) * 100))
-        }
-      }
-
-      peticion.onload = () => {
-        if (peticion.status >= 200 && peticion.status < 300) {
-          setProgreso(null)
-          onSubido(firma.rutaPublica)
-        } else {
-          setProgreso(null)
-          setError(
-            peticion.status === 403
-              ? 'R2 rechazó la subida (403). La firma pudo caducar: vuelve a intentarlo.'
-              : `La subida falló con código ${peticion.status}.`,
-          )
-        }
-        peticionRef.current = null
-        resolver()
-      }
-
-      peticion.onerror = () => {
-        setProgreso(null)
-        peticionRef.current = null
+      if (!abort.signal.aborted)
         setError(
-          'Error de red al subir. Si es un error de CORS, falta el método PUT en la política del bucket (SETUP.md, A4).',
+          e instanceof Error ? e.message : 'No se pudo subir el archivo.',
         )
-        resolver()
+    } finally {
+      if (controlador.current === abort) {
+        controlador.current = null
+        setProgreso(null)
+        onOcupado?.(false)
       }
-
-      peticion.onabort = () => {
-        peticionRef.current = null
-        resolver()
-      }
-
-      peticion.send(archivo)
-    })
+    }
   }
-
   return (
     <div>
       <input
-        ref={entradaRef}
+        ref={entrada}
         type="file"
-        accept={tiposPermitidos.join(',')}
+        accept={tiposParaSubida(tipo).join(',')}
         className="sr-only"
+        aria-label={etiqueta}
+        disabled={disabled || progreso !== null}
         onChange={(e) => {
           const archivo = e.target.files?.[0]
           if (archivo) void subir(archivo)
-          // Se limpia para poder volver a elegir el mismo archivo tras un fallo.
           e.target.value = ''
         }}
       />
-
       <div className="flex flex-wrap items-center gap-3">
         <Boton
           type="button"
-          onClick={() => entradaRef.current?.click()}
-          disabled={progreso !== null}
+          disabled={disabled || progreso !== null}
+          onClick={() => entrada.current?.click()}
         >
           {etiqueta}
         </Boton>
-
         {progreso !== null ? (
           <>
-            <div
-              className="h-2 w-40 overflow-hidden rounded-full bg-neutral-200"
-              role="progressbar"
-              aria-valuenow={progreso}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Progreso de la subida"
+            <span
+              role="status"
+              aria-live="polite"
+              className="text-sm text-neutral-500"
             >
-              <div
-                className="h-full bg-neutral-900 transition-[width]"
-                style={{ width: `${progreso}%` }}
-              />
-            </div>
-            <span className="text-xs tabular-nums text-neutral-500">{progreso}%</span>
-            <button
-              type="button"
-              onClick={cancelar}
-              className="text-xs text-neutral-500 underline underline-offset-4"
-            >
-              Cancelar
-            </button>
+              Subiendo… {progreso}%
+            </span>
+            <Boton type="button" onClick={() => controlador.current?.abort()}>
+              Cancelar subida
+            </Boton>
           </>
         ) : null}
       </div>
-
-      {ayuda && !error ? (
-        <p className="mt-1 text-xs text-neutral-500">{ayuda}</p>
-      ) : null}
       {error ? (
-        <p role="alert" className="mt-1 text-xs text-red-600">
+        <p role="alert" className="mt-2 text-sm text-red-600">
           {error}
         </p>
+      ) : ayuda ? (
+        <p className="mt-2 text-xs text-neutral-500">{ayuda}</p>
       ) : null}
     </div>
   )

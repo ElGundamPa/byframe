@@ -5,7 +5,7 @@ const ts = require('typescript')
 
 // Carga el código real con dobles de los servicios externos. Nunca usa .env,
 // Supabase o R2; tampoco requiere que Next.js esté arrancado.
-function createLoader(mocks = {}) {
+function createLoader(mocks = {}, globals = {}) {
   const cache = new Map()
   const root = path.resolve(__dirname, '../..')
 
@@ -43,6 +43,14 @@ function createLoader(mocks = {}) {
       Request,
       Response,
       console,
+      crypto: require('node:crypto').webcrypto,
+      AbortController,
+      DOMException,
+      File,
+      Blob,
+      setTimeout,
+      clearTimeout,
+      ...globals,
     }, { filename: full })
     return module.exports
   }

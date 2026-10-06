@@ -5,11 +5,25 @@ colombiana.
 
 - **Sitio público**: Next.js 15 (App Router) + Tailwind CSS. Fondo negro, el video manda.
 - **Datos y sesión**: Supabase (Postgres + Auth + Row Level Security).
-- **Medios**: Cloudflare R2 tras el dominio `media.byframe.co`. Reproducción HLS.
+- **Medios**: Cloudflare R2 tras el dominio `media.byframe.co`. Reproducción HLS y MP4 directo.
 - **Transcodificación**: local, con ffmpeg, mediante `scripts/transcode.mjs`. Cero
   servicios de pago para video.
 
 El aprovisionamiento completo de Cloudflare y Supabase está en [SETUP.md](./SETUP.md).
+
+## Subir contenido desde el administrador
+
+En «Nuevo proyecto» basta con el título y elegir entre subir un MP4 de hasta
+200 MB o pegar un enlace de YouTube. La subida prepara una miniatura, detecta
+la orientación y guarda la duración; YouTube usa su propia miniatura. Cliente,
+año, descripción, imagen personalizada y créditos están en «Más detalles» y
+son opcionales. El enlace interno se genera automáticamente. Mientras se sube
+un archivo no se puede guardar; la subida se puede cancelar y reintentar.
+
+Los proyectos HLS existentes siguen funcionando. El campo histórico `hls_url`
+almacena la fuente propia del video, que puede ser `.m3u8` o `.mp4`; no se
+requiere otra migración de base de datos. Para videos mayores de 200 MB se
+puede usar YouTube o conservar el flujo de transcodificación local.
 
 ## Estado
 
