@@ -344,3 +344,10 @@ test('la subida completa rellena título, duración, formato y miniatura antes d
   assert.equal(saved[0].hls_url, 'https://media.example/video-unique.mp4')
   assert.equal(saved[0].youtube_id, '')
 })
+
+test('editar un proyecto de YouTube muestra un enlace completo en lugar de un ID técnico', () => {
+  const env = formHarness(async () => ({ ok: true }))
+  const props = { inicial: { ...formValues, hls_url: '', youtube_id: 'abcdefghijk' }, esNuevo: false }
+  const input = find(env.render(props), (node) => node.type === 'input' && node.props.id === 'youtube_id')
+  assert.equal(input.props.value, 'https://www.youtube.com/watch?v=abcdefghijk')
+})

@@ -72,7 +72,15 @@ export function FormularioProyecto({
 }) {
   const router = useRouter()
   const [pendiente, iniciarTransicion] = useTransition()
-  const [valores, setValores] = useState(inicial)
+  const [valores, setValores] = useState(() => {
+    const youtube = extraerIdDeYoutube(inicial.youtube_id)
+    return {
+      ...inicial,
+      youtube_id: youtube
+        ? `https://www.youtube.com/watch?v=${youtube}`
+        : inicial.youtube_id,
+    }
+  })
   const [sucio, setSucio] = useState(false)
   const [estado, setEstado] = useState<Estado>({ tipo: 'inactivo' })
   const [errores, setErrores] = useState<Record<string, string>>({})
