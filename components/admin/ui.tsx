@@ -112,10 +112,12 @@ export function ConfirmarBorrado({
   nombre,
   onConfirmar,
   onCancelar,
+  permanente = false,
 }: {
   nombre: string
   onConfirmar: () => void
   onCancelar: () => void
+  permanente?: boolean
 }) {
   return (
     <div
@@ -129,13 +131,14 @@ export function ConfirmarBorrado({
           ¿Eliminar «{nombre}»?
         </h2>
         <p className="mt-2 text-sm text-neutral-600">
-          Deja de verse en el sitio público de inmediato. No se borra de la base
-          de datos: se puede restaurar desde la papelera.
+          {permanente
+            ? 'Este perfil se eliminará definitivamente. No se puede restaurar desde el panel.'
+            : 'Deja de verse en el sitio público de inmediato. No se borra de la base de datos: se puede restaurar desde la papelera.'}
         </p>
         <div className="mt-6 flex justify-end gap-3">
           <Boton onClick={onCancelar}>Cancelar</Boton>
           <Boton variante="peligro" onClick={onConfirmar} autoFocus>
-            Eliminar
+            {permanente ? 'Eliminar definitivamente' : 'Eliminar'}
           </Boton>
         </div>
       </div>

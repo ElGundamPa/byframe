@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 
-import { TAMANO_MAXIMO, TIPOS_PERMITIDOS } from '@/lib/admin/esquemas'
+import { TAMANO_MAXIMO, tiposParaSubida, type TipoDeSubida } from '@/lib/admin/esquemas'
 import { Boton } from './ui'
 
 /**
@@ -27,7 +27,7 @@ export function SubidaArchivo({
   onSubido,
 }: {
   slug: string
-  tipo: 'poster' | 'loop' | 'equipo' | 'sitio'
+  tipo: TipoDeSubida
   etiqueta: string
   ayuda?: string
   onSubido: (rutaPublica: string) => void
@@ -36,6 +36,7 @@ export function SubidaArchivo({
   const peticionRef = useRef<XMLHttpRequest | null>(null)
   const [progreso, setProgreso] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const tiposPermitidos = tiposParaSubida(tipo)
 
   const cancelar = () => {
     peticionRef.current?.abort()
@@ -53,8 +54,12 @@ export function SubidaArchivo({
       return
     }
 
-    if (!TIPOS_PERMITIDOS.includes(archivo.type as (typeof TIPOS_PERMITIDOS)[number])) {
-      setError(`Tipo no admitido: ${archivo.type || 'desconocido'}.`)
+    if (!tiposPermitidos.includes(archivo.type as (typeof tiposPermitidos)[number])) {
+      setError(
+        tipo === 'loop' || tipo === 'portada'
+          ? 'Selecciona un video MP4.'
+          : 'Selecciona una imagen JPG, PNG, WebP o AVIF.',
+      )
       return
     }
 
@@ -142,7 +147,7 @@ export function SubidaArchivo({
       <input
         ref={entradaRef}
         type="file"
-        accept={TIPOS_PERMITIDOS.join(',')}
+        accept={tiposPermitidos.join(',')}
         className="sr-only"
         onChange={(e) => {
           const archivo = e.target.files?.[0]

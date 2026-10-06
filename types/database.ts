@@ -236,7 +236,12 @@ export type Database = {
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      guardar_proyecto_con_creditos: {
+        Args: { p_proyecto: Json; p_creditos: Json }
+        Returns: { id: string; slug: string; published: boolean }[]
+      }
+    }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
   }

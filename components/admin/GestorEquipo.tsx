@@ -135,6 +135,7 @@ export function GestorEquipo({ inicial }: { inicial: Miembro[] }) {
       {porEliminar ? (
         <ConfirmarBorrado
           nombre={porEliminar.name}
+          permanente
           onCancelar={() => setPorEliminar(null)}
           onConfirmar={() => {
             const id = porEliminar.id

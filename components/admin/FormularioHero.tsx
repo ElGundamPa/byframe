@@ -116,7 +116,7 @@ export function FormularioHero({
           <div className="mt-2">
             <SubidaArchivo
               slug="hero"
-              tipo="sitio"
+              tipo="portada"
               etiqueta="Subir video"
               ayuda="mp4 mudo y comprimido: se reproduce en bucle y sin controles."
               onSubido={(ruta) => actualizar({ custom_video_url: ruta })}

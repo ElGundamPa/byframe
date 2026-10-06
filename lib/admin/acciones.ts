@@ -57,7 +57,7 @@ function erroresDeZod(error: {
 
 export async function guardarProyecto(
   entrada: unknown,
-): Promise<Resultado<{ id: string }>> {
+): Promise<Resultado<{ id: string; published: boolean }>> {
   try {
     await exigirSesion()
 
@@ -73,18 +73,12 @@ export async function guardarProyecto(
     const { credits, id, ...proyecto } = analisis.data
     const supabase = await createClient()
 
-    const { data: guardado, error } = id
-      ? await supabase
-          .from('projects')
-          .update(proyecto)
-          .eq('id', id)
-          .select('id, slug')
-          .single()
-      : await supabase
-          .from('projects')
-          .insert(proyecto)
-          .select('id, slug')
-          .single()
+    // Una llamada, una transacción: nunca deja el proyecto sin sus créditos
+    // anteriores cuando falla la escritura de los nuevos.
+    const { data, error } = await supabase.rpc('guardar_proyecto_con_creditos', {
+      p_proyecto: { ...proyecto, ...(id ? { id } : {}) },
+      p_creditos: credits.map(({ role, name }) => ({ role, name })),
+    })
 
     if (error) {
       // 23505 es violación de unicidad: el único índice único aquí es el slug.
@@ -95,41 +89,26 @@ export async function guardarProyecto(
           campos: { slug: 'Este slug ya está en uso.' },
         }
       }
+      if (error.code === 'PGRST202') {
+        console.error('Falta aplicar 0007_guardado_atomico_proyectos.sql en Supabase.')
+        return {
+          ok: false,
+          error: 'El guardado necesita una actualización del servidor. Contacta al administrador del sitio.',
+        }
+      }
+      if (error.code === 'P0002') {
+        return { ok: false, error: 'El proyecto no existe o está en la papelera. Vuelve al listado.' }
+      }
       return { ok: false, error: `No se pudo guardar: ${error.message}` }
     }
 
-    /*
-     * Los créditos se reemplazan enteros en vez de calcular altas, bajas y
-     * cambios. Son cinco o seis filas por proyecto: la diferencia de coste es
-     * nula y la lógica incremental es donde aparecen los duplicados y los
-     * huérfanos.
-     */
-    await supabase.from('project_credits').delete().eq('project_id', guardado.id)
-
-    if (credits.length > 0) {
-      const { error: errorCreditos } = await supabase
-        .from('project_credits')
-        .insert(
-          credits.map((credito, indice) => ({
-            project_id: guardado.id,
-            role: credito.role,
-            name: credito.name,
-            sort_order: indice,
-          })),
-        )
-
-      if (errorCreditos) {
-        return {
-          ok: false,
-          error: `El proyecto se guardó, pero los créditos no: ${errorCreditos.message}`,
-        }
-      }
-    }
+    const guardado = data?.[0]
+    if (!guardado) return { ok: false, error: 'El servidor no confirmó el guardado. Recarga y revisa el proyecto.' }
 
     revalidateTag(TAGS.proyectos)
     revalidateTag(TAGS.hero)
 
-    return { ok: true, datos: { id: guardado.id } }
+    return { ok: true, datos: { id: guardado.id, published: guardado.published } }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error inesperado.' }
   }

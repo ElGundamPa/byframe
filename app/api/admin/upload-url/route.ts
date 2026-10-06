@@ -1,7 +1,7 @@
 import { AwsClient } from 'aws4fetch'
 import { NextResponse } from 'next/server'
 
-import { esquemaSubida } from '@/lib/admin/esquemas'
+import { esquemaSubida, tiposParaSubida } from '@/lib/admin/esquemas'
 import { getR2Config } from '@/lib/env'
 import { getUsuarioActual } from '@/lib/supabase/server'
 
@@ -66,13 +66,12 @@ export async function POST(peticion: Request) {
 
   // El loop es video; póster y fotos son imagen. Cruzarlos deja el sitio
   // intentando pintar un mp4 dentro de un <img>.
-  const esVideo = contentType.startsWith('video/')
-  if ((tipo === 'loop') !== esVideo) {
+  if (!tiposParaSubida(tipo).includes(contentType)) {
     return NextResponse.json(
       {
         error:
-          tipo === 'loop'
-            ? 'El loop tiene que ser un archivo de video mp4.'
+          tipo === 'loop' || tipo === 'portada'
+            ? 'Este campo espera un archivo de video mp4.'
             : 'Este campo espera una imagen, no un video.',
       },
       { status: 400 },
@@ -89,6 +88,7 @@ export async function POST(peticion: Request) {
     loop: `projects/${slug}/loop.${extension}`,
     equipo: `team/${slug}.${extension}`,
     sitio: `site/${slug}.${extension}`,
+    portada: `site/${slug}.${extension}`,
   }
   const clave = rutas[tipo]
 

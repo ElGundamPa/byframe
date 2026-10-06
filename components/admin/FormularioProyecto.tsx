@@ -133,6 +133,7 @@ export function FormularioProyecto({
   }
 
   const enviar = (publicar?: boolean) => {
+    if (pendiente) return
     setEstado({ tipo: 'guardando' })
     setErrores({})
 
@@ -157,12 +158,16 @@ export function FormularioProyecto({
       const resultado = await guardarProyecto(entrada)
 
       if (resultado.ok) {
+        if (resultado.datos) {
+          const { id, published } = resultado.datos
+          setValores((previos) => ({ ...previos, id, published }))
+        }
         setSucio(false)
         setEstado({
           tipo: 'exito',
           mensaje: entrada.published ? 'Guardado y publicado.' : 'Guardado como borrador.',
         })
-        if (esNuevo && resultado.datos) {
+        if (esNuevo && !valores.id && resultado.datos) {
           router.replace(`/admin/proyectos/${resultado.datos.id}`)
         }
         router.refresh()
@@ -189,6 +194,7 @@ export function FormularioProyecto({
       }}
       className="space-y-10"
     >
+      <fieldset disabled={pendiente} className="contents">
       {/* ── Datos ─────────────────────────────────────────────────────── */}
       <section className="space-y-5">
         <div className="grid gap-5 sm:grid-cols-2">
@@ -510,6 +516,7 @@ export function FormularioProyecto({
           <AvisoEstado estado={estado} />
         </div>
       </div>
+      </fieldset>
     </form>
   )
 }

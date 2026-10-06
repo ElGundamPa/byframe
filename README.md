@@ -266,8 +266,35 @@ middleware.ts                     punto de entrada del middleware
 npm run dev         # servidor de desarrollo
 npm run build       # compilación de producción
 npm run typecheck   # tsc --noEmit
+npm test            # regresiones del administrador, sin acceder a producción
 npm run transcode   # prepara y sube una pieza (ver arriba)
 ```
+
+## Actualización del guardado del administrador
+
+Antes de publicar esta versión, ejecutar
+`supabase/migrations/0007_guardado_atomico_proyectos.sql` en el SQL Editor del
+proyecto de Supabase que utiliza ByFrame. Requiere las migraciones anteriores,
+incluida `0006_youtube.sql`. La instalación añade una función y no altera el
+contenido existente. Es compatible con el administrador anterior, por lo que
+se puede aplicar primero y desplegar el código después.
+
+El nuevo guardado usa una transacción para proyecto y créditos. Si falla
+cualquier escritura, se conserva la versión anterior completa. No necesita
+la clave `service_role`: utiliza la sesión del administrador y las políticas
+RLS existentes. Si falta la función, el panel comunica el problema y no vuelve
+al guardado parcial anterior.
+
+Comprobación en una base de desarrollo:
+`supabase/tests/project_save_checks.sql` valida altas, reemplazo de créditos,
+rollback ante fallos, publicación y permisos. Sus datos y trigger de prueba se
+revierten con `rollback` al terminar. No ejecutar las pruebas sobre producción.
+
+Después de desplegar, comprobar con un proyecto de prueba: guardar borrador,
+publicar, guardar otra vez y pasar a borrador. Verificar que el estado y los
+créditos coincidan tras recargar. En Portada, «Subir video» acepta MP4; los
+campos de imágenes aceptan JPG, PNG, WebP y AVIF. La eliminación de perfiles
+advierte que es definitiva, mientras que los proyectos conservan su papelera.
 
 ## Notas de seguridad
 

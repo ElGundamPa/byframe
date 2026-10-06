@@ -161,13 +161,25 @@ export const TIPOS_PERMITIDOS = [
   'video/mp4',
 ] as const
 
+export const TIPOS_DE_SUBIDA = ['poster', 'loop', 'equipo', 'sitio', 'portada'] as const
+export type TipoDeSubida = (typeof TIPOS_DE_SUBIDA)[number]
+
+/** El selector y el servidor deben aceptar los mismos archivos para cada campo. */
+export function tiposParaSubida(tipo: TipoDeSubida) {
+  return TIPOS_PERMITIDOS.filter((mime) =>
+    tipo === 'loop' || tipo === 'portada'
+      ? mime === 'video/mp4'
+      : mime.startsWith('image/'),
+  )
+}
+
 /** 200 MB. Un loop de 6 s pesa 2; un póster, menos de uno. */
 export const TAMANO_MAXIMO = 200 * 1024 * 1024
 
 export const esquemaSubida = z.object({
   slug: esquemaSlug,
   // Qué se sube. La carpeta HLS nunca: esa va siempre por el script.
-  tipo: z.enum(['poster', 'loop', 'equipo', 'sitio']),
+  tipo: z.enum(TIPOS_DE_SUBIDA),
   nombreArchivo: z.string().trim().min(1).max(200),
   contentType: z.enum(TIPOS_PERMITIDOS),
   tamano: z.number().int().min(1).max(TAMANO_MAXIMO),
