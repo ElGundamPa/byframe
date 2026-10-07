@@ -132,7 +132,7 @@ export function FormularioProyecto({
           : inicial.hls_url
             ? inicial.youtube_id
             : '',
-      loop_url: fuente === 'video' ? valores.loop_url : '',
+      loop_url: valores.loop_url,
       published: publicar ?? valores.published,
       credits: valores.credits.map(({ role, name }) => ({ role, name })),
     }
@@ -270,7 +270,7 @@ export function FormularioProyecto({
               etiqueta="Enlace de YouTube"
               id="youtube_id"
               error={errores.youtube_id}
-            ayuda="Usa un video público o no listado. Su imagen de portada se añade automáticamente."
+              ayuda="Usa un video público o no listado. Su imagen de portada se añade automáticamente."
             >
               <input
                 id="youtube_id"
@@ -280,14 +280,19 @@ export function FormularioProyecto({
                 value={valores.youtube_id}
                 placeholder="https://www.youtube.com/watch?v=…"
                 className={claseEntrada}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const anterior = extraerIdDeYoutube(valores.youtube_id)
+                  const siguiente = extraerIdDeYoutube(e.target.value)
                   actualizar({
                     youtube_id: e.target.value,
+                    ...(anterior && anterior !== siguiente
+                      ? { poster_url: '', loop_url: '' }
+                      : {}),
                     ...(/\/shorts\//.test(e.target.value)
                       ? { format: 'vertical' as const }
                       : {}),
                   })
-                }
+                }}
               />
             </Campo>
           )}

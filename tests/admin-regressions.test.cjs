@@ -351,3 +351,30 @@ test('editar un proyecto de YouTube muestra un enlace completo en lugar de un ID
   const input = find(env.render(props), (node) => node.type === 'input' && node.props.id === 'youtube_id')
   assert.equal(input.props.value, 'https://www.youtube.com/watch?v=abcdefghijk')
 })
+
+test('editar el título de YouTube conserva la portada y la previsualización existentes', async () => {
+  const saved = []
+  const env = formHarness(async (input) => { saved.push(input); return { ok: true, datos: { id: PROJECT_ID, published: true } } })
+  const props = { inicial: { ...formValues, hls_url: '', youtube_id: 'abcdefghijk', poster_url: '/portada.jpg', loop_url: '/preview.mp4' }, esNuevo: false }
+  find(env.render(props), (node) => node.type === 'input' && node.props.id === 'title').props.onChange({ target: { value: 'Título actualizado' } })
+  button(env.render(props), 'Guardar y publicar').props.onClick()
+  await env.wait()
+  assert.equal(saved[0].poster_url, '/portada.jpg')
+  assert.equal(saved[0].loop_url, '/preview.mp4')
+})
+
+test('reemplazar YouTube actualiza la portada, pero añadir parámetros al mismo video la conserva', async () => {
+  const saved = []
+  const env = formHarness(async (input) => { saved.push(input); return { ok: true, datos: { id: PROJECT_ID, published: true } } })
+  const props = { inicial: { ...formValues, hls_url: '', youtube_id: 'abcdefghijk', poster_url: '/portada.jpg', loop_url: '/preview.mp4' }, esNuevo: false }
+  find(env.render(props), (node) => node.type === 'input' && node.props.id === 'youtube_id').props.onChange({ target: { value: 'https://youtu.be/abcdefghijk?t=5' } })
+  button(env.render(props), 'Guardar y publicar').props.onClick()
+  await env.wait()
+  assert.equal(saved[0].poster_url, '/portada.jpg')
+  assert.equal(saved[0].loop_url, '/preview.mp4')
+  find(env.render(props), (node) => node.type === 'input' && node.props.id === 'youtube_id').props.onChange({ target: { value: 'https://youtu.be/lmnopqrstuv' } })
+  env.render(props).props.onSubmit({ preventDefault() {} })
+  await env.wait()
+  assert.equal(saved[1].poster_url, '')
+  assert.equal(saved[1].loop_url, '')
+})
